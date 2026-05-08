@@ -1,3 +1,5 @@
+// src/utils/Controls.js
+
 class Controls {
     static init() {
         const defaultPC = {
@@ -17,7 +19,7 @@ class Controls {
             P2_NOTE_LEFT: [65, 37],
             P2_NOTE_RIGHT: [68, 39],
             // General actions
-            ACCEPT: [13, 32, 90],
+            ACCEPT: [13, 32, 90], // ENTER, SPACE, Z
             BACK: [27, 8, 88],
             PAUSE: [13, 27, 80],
             DEBUGG: [55, 103],
@@ -41,9 +43,9 @@ class Controls {
             P2_NOTE_DOWN: [13, 0],
             P2_NOTE_LEFT: [14, 2],
             P2_NOTE_RIGHT: [15, 1],
-            ACCEPT: [0, 9],
-            BACK: [1],
-            PAUSE: [9],
+            ACCEPT: [0, 9],       // A/Cross, Start
+            BACK: [1],            // B/Circle
+            PAUSE: [9],           // Start
             DEBUGG: [],
             VOL_UP: [],
             VOL_DOWN: [],
@@ -56,11 +58,26 @@ class Controls {
 
         this.PCKeyBinds = savedPC || defaultPC;
         this.GamepadBinds = savedGP || defaultGamepad;
-    }
 
-    static checkAction(e, action) {
-        if (!e || !this.PCKeyBinds[action]) return false;
-        return this.PCKeyBinds[action].includes(e.keyCode);
+        // Construcción de la API limpia: Controls.ACCEPT(e), Controls.BACK(e), etc.
+        Object.keys(this.PCKeyBinds).forEach(action => {
+            Controls[action] = (e) => {
+                if (!e) return false;
+
+                // Si es un evento de teclado
+                if (e.keyCode !== undefined) {
+                    return this.PCKeyBinds[action].includes(e.keyCode);
+                }
+
+                // Si es un evento de Gamepad (Phaser o nativo suelen usar 'button' o 'index')
+                let btnIndex = e.button !== undefined ? e.button : e.index;
+                if (btnIndex !== undefined && this.GamepadBinds[action]) {
+                    return this.GamepadBinds[action].includes(btnIndex);
+                }
+
+                return false;
+            };
+        });
     }
 }
 

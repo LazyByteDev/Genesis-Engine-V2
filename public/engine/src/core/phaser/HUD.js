@@ -1,6 +1,6 @@
 class HUDScene extends Phaser.Scene {
     constructor() {
-        super({ key: 'HUDScene', active: true });
+        super({ key: 'HUDScene' });
     }
 
     create() {
@@ -22,4 +22,5 @@ class HUDScene extends Phaser.Scene {
 }
 
 window.HUDScene = HUDScene;
-game.scene.add('HUDScene', HUDScene, true);
+
+window.game.scene.add('HUDScene', window.HUDScene, true);

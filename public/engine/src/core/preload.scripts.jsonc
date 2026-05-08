@@ -1,6 +1,7 @@
 [
   // native
   "src/core/native/pc/neutralino.js",
+  "src/utils/Storage.js",
 
   // core
   "src/core/phaser/config.js",
@@ -8,6 +9,7 @@
   "src/core/phaser/wide.js",
 
   // utils
+  "src/utils/Conductor.js",
   "src/utils/Path.js",
   "src/utils/Controls.js",
   "src/utils/ClientGlobals.js",
@@ -15,5 +17,8 @@
   "src/utils/alphabet/AlphabetData.js",
   "src/utils/animations/sparrow/SparrowParser.js",
   "src/utils/soundtray/main.js",
-  "src/utils/soundtray/renderer.js"
+  "src/utils/soundtray/renderer.js",
+
+  // intro
+  "src/funkin/menu/intro/text.js"
 ]

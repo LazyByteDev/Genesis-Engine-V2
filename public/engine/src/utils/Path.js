@@ -18,6 +18,9 @@ class Path {
   // Fonts
   static fonts = "assets/fonts/";
 
+  // Images
+  static img = "assets/images/";
+
   // Characters
   static chars = "assets/images/characters/";
   static charsAtlas = "assets/images/characters/atlas/";

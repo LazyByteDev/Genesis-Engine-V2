@@ -9,5 +9,3 @@ window.GenesisConfig = {
     },
     backgroundColor: '#000000'
 };
-
-window.game = new Phaser.Game(window.GenesisConfig);
