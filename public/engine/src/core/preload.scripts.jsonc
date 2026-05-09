@@ -9,16 +9,28 @@
   "src/core/phaser/wide.js",
 
   // utils
+  "src/utils/FullScreenScaleMode.js",
   "src/utils/Conductor.js",
   "src/utils/Path.js",
   "src/utils/Controls.js",
   "src/utils/ClientGlobals.js",
   "src/utils/alphabet/Alphabet.js",
   "src/utils/alphabet/AlphabetData.js",
-  "src/utils/animations/sparrow/SparrowParser.js",
   "src/utils/soundtray/main.js",
   "src/utils/soundtray/renderer.js",
+  "src/utils/visuals/TransitionScene.js",
+
+  // Data
+  "src/funkin/DataSongs.js",
 
   // intro
-  "src/funkin/menu/intro/text.js"
+  "src/funkin/menu/intro/text.js",
+  "src/funkin/menu/intro/funScript.js",
+  "src/funkin/menu/intro/danceGF.js",
+
+  // main
+  "src/funkin/menu/main/menu.js",
+
+  // free
+  "src/funkin/menu/free/FreeplayScene.js"
 ]

@@ -20,9 +20,9 @@ class SoundTray {
     }
 
     static handleKey(e) {
-        if (Controls.checkAction(e, 'VOL_UP')) this.change(0.1);
-        if (Controls.checkAction(e, 'VOL_DOWN')) this.change(-0.1);
-        if (Controls.checkAction(e, 'VOL_MUTE')) {
+        if (Controls.VOL_UP(e)) this.change(0.1);
+        if (Controls.VOL_DOWN(e)) this.change(-0.1);
+        if (Controls.VOL_MUTE(e)) {
             this.scene.sound.mute = !this.scene.sound.mute;
         }
     }

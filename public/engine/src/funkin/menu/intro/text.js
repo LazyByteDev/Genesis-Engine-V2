@@ -8,17 +8,15 @@ class IntroTextScene extends Phaser.Scene {
     this.currentYOffset = 0;
     this.sceneEnded = false;
     this.currentRandomPair = null;
-
     this.startY = 300;
     this.lineSpacing = 55;
-
     this.introEvents = [];
     this.currentEventIndex = 0;
+    this._waitingToSkip = false; // Flag para evitar que el salto se llame múltiples veces
   }
 
   preload() {
     Alphabet.load(this);
-    
     this.load.json("introData", Path.dataUI + "intro.json");
     this.load.text("randomText", Path.dataUI + "randomText.txt");
 
@@ -41,10 +39,7 @@ class IntroTextScene extends Phaser.Scene {
     const introData = this.cache.json.get("introData");
     const sequence = introData ? introData.introSequences[0] : null;
 
-    if (!sequence) {
-      console.warn("Genesis Engine: No se encontró la secuencia en introData.");
-      return;
-    }
+    if (!sequence) return;
 
     Conductor.mapTimeChanges([new SongTimeChange(0, sequence.bpm, 4, 4)]);
     const beatTime = Conductor.beatLengthMs;
@@ -53,48 +48,30 @@ class IntroTextScene extends Phaser.Scene {
     if (textFile) {
       this.randomTextPairs = textFile
         .split("\n")
-        .filter((line) => line.trim() !== "")
-        .map((line) => {
-          const parts = line.split("--").map((part) => part.trim().toUpperCase());
-          return parts.length >= 2 ? parts : [parts[0], ""];
+        .filter((l) => l.trim() !== "")
+        .map((l) => {
+          const p = l.split("--").map((part) => part.trim().toUpperCase());
+          return p.length >= 2 ? p : [p[0], ""];
         });
-    } else {
-      this.randomTextPairs = [["GENESIS", "ENGINE"]];
     }
 
-    this.introEvents = sequence.steps.map(step => ({
-      ...step,
-      targetTime: step.beat * beatTime
-    }));
-    this.introEvents.sort((a, b) => a.targetTime - b.targetTime);
-    this.currentEventIndex = 0;
+    this.introEvents = sequence.steps
+      .map((step) => ({
+        ...step,
+        targetTime: step.beat * beatTime,
+      }))
+      .sort((a, b) => a.targetTime - b.targetTime);
 
     this.music = this.sound.add("introMusic", { loop: true });
     this.music.play();
 
-    // ========= API SUPER LIMPIA =========
     this.inputListener = (e) => {
-      // Unifica teclado y gamepad con solo esta llamada
-      if (Controls.ACCEPT(e)) {
-        this.skipIntro();
-      }
+      if (Controls.ACCEPT(e)) this.skipIntro();
     };
-    
-    window.addEventListener('keydown', this.inputListener);
-    
-    // Soporte para mandos conectados a Phaser
-    if (this.input.gamepad) {
-      this.input.gamepad.on('down', (pad, button) => this.inputListener(button));
-    }
-
-    if (window.isMobile) {
-        this.input.on('pointerdown', () => {
-            this.skipIntro();
-        });
-    }
+    window.addEventListener("keydown", this.inputListener);
   }
 
-  update(time, delta) {
+  update() {
     if (this.sceneEnded) return;
 
     if (this.music && this.music.isPlaying) {
@@ -108,87 +85,76 @@ class IntroTextScene extends Phaser.Scene {
       if (currentSongTime >= nextEvent.targetTime) {
         this.processJsonStep(nextEvent);
         this.currentEventIndex++;
-      } else {
-        break;
-      }
+      } else break;
+    }
+
+    // ARREGLO: Autotransición cuando se terminan de mostrar todos los textos
+    if (this.currentEventIndex >= this.introEvents.length && !this._waitingToSkip && !this.sceneEnded) {
+      this._waitingToSkip = true;
+      // Saltamos automáticamente después de que pase 1 beat extra
+      this.time.delayedCall(Conductor.beatLengthMs, () => {
+        this.skipIntro();
+      });
+    }
+
+    // ARREGLO: Transición forzada en el beat 16 (Comportamiento estándar de FNF)
+    if (Conductor.currentBeat >= 16 && !this._waitingToSkip && !this.sceneEnded) {
+      this.skipIntro();
     }
   }
 
   processJsonStep(step) {
-    let shouldVibrate = false;
-
     if (step.clear) {
-      shouldVibrate = true;
       this.texts.forEach((t) => t.destroy());
       this.texts = [];
-      if (this.imageObj) {
-        this.imageObj.destroy();
-        this.imageObj = null;
-      }
+      if (this.imageObj) this.imageObj.destroy();
       this.currentYOffset = 0;
     }
-
-    if (step.text && step.text.length > 0) {
-      shouldVibrate = true;
-      step.text.forEach(line => {
-        this.displayTextLine(line);
-      });
-    }
-
+    if (step.text) step.text.forEach((line) => this.displayTextLine(line));
     if (step.img) {
-      shouldVibrate = true;
       if (this.imageObj) this.imageObj.destroy();
-
-      this.imageObj = this.add.image(
-        this.cameras.main.width / 2,
-        this.startY + this.currentYOffset + 80,
-        step.img.id
-      )
-        .setOrigin(0.5, 0.5)
+      this.imageObj = this.add
+        .image(
+          this.cameras.main.width / 2,
+          this.startY + this.currentYOffset + 80,
+          step.img.id,
+        )
+        .setOrigin(0.5)
         .setScale(step.img.scale || 1);
-
       this.currentYOffset += 100;
     }
-
     if (step.action) {
-      switch (step.action) {
-        case "random-text-1":
-          shouldVibrate = true;
-          this.currentRandomPair = this.getRandomTextPair();
-          this.displayTextLine(this.currentRandomPair[0]);
-          break;
-        case "random-text-2":
-          shouldVibrate = true;
-          if (!this.currentRandomPair) {
-            this.currentRandomPair = this.getRandomTextPair();
-          }
-          this.displayTextLine(this.currentRandomPair[1]);
-          break;
-        case "skipIntro":
-          this.skipIntro();
-          break;
+      if (step.action === "random-text-1") {
+        this.currentRandomPair = this.getRandomTextPair();
+        this.displayTextLine(this.currentRandomPair[0]);
+      } else if (step.action === "random-text-2") {
+        this.displayTextLine(
+          this.currentRandomPair ? this.currentRandomPair[1] : "",
+        );
+      } else if (step.action === "skipIntro") {
+        this.skipIntro();
       }
     }
-
-    this.attemptVibration(shouldVibrate);
   }
 
   skipIntro() {
     if (this.sceneEnded) return;
     this.sceneEnded = true;
-    
+    this._waitingToSkip = true;
+
     this.attemptVibration(true);
-    
-    this.scene.stop();
-    console.log("Intro terminada, cambiando de escena");
+
+    // Inicia la escena de baile de GF de forma directa y fluida
+    this.scene.start("introDance");
   }
 
   attemptVibration(condition) {
     if (condition && navigator.vibrate) {
       try {
-        if (navigator.userActivation && navigator.userActivation.hasBeenActive) {
-          navigator.vibrate(70);
-        } else if (typeof navigator.userActivation === "undefined") {
+        if (
+          navigator.userActivation &&
+          navigator.userActivation.hasBeenActive
+        ) {
           navigator.vibrate(70);
         }
       } catch (e) {}
@@ -197,45 +163,37 @@ class IntroTextScene extends Phaser.Scene {
 
   displayTextLine(textString) {
     if (!textString) return;
-
-    const text = new window.Alphabet(this, 0, 0, textString.toUpperCase(), true, 1);
-    text.x = (this.cameras.main.width / 2) - (text.width / 2);
+    const text = new window.Alphabet(
+      this,
+      0,
+      0,
+      textString.toUpperCase(),
+      true,
+      1,
+    );
+    text.x = this.cameras.main.width / 2 - text.width / 2;
     text.y = this.startY + this.currentYOffset;
-
     this.texts.push(text);
     this.currentYOffset += this.lineSpacing;
   }
 
   getRandomTextPair() {
-    if (this.randomTextPairs.length === 0) return ["PART 1", "PART 2"];
-    const randomIndex = Math.floor(Math.random() * this.randomTextPairs.length);
-    return this.randomTextPairs[randomIndex];
+    return this.randomTextPairs.length > 0
+      ? this.randomTextPairs[
+          Math.floor(Math.random() * this.randomTextPairs.length)
+        ]
+      : ["PART 1", "PART 2"];
   }
 
   shutdown() {
-    if (this.music) {
-      this.music.stop();
-      this.music.destroy();
-      this.music = null;
-    }
-
+    // ARREGLO: Ya no detenemos la música aquí para que haga una transición perfecta
+    // al entrar en la escena de danceGF.
     this.texts.forEach((t) => t.destroy());
-    this.texts = [];
-
-    if (this.imageObj) {
-      this.imageObj.destroy();
-      this.imageObj = null;
-    }
-
-    this.introEvents = [];
-    
-    window.removeEventListener('keydown', this.inputListener);
-    if (this.input.gamepad) {
-      this.input.gamepad.off('down');
-    }
-    this.input.off('pointerdown');
+    if (this.imageObj) this.imageObj.destroy();
+    window.removeEventListener("keydown", this.inputListener);
   }
 }
 
+DataSongs.loadWeeks()
 window.IntroTextScene = IntroTextScene;
 window.game.scene.add("IntroTextScene", window.IntroTextScene, true);

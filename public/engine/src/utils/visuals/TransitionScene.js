@@ -1,3 +1,5 @@
+// src/utils/visuals/TransitionScene.js
+
 class TransitionScene extends Phaser.Scene {
     constructor() {
         super({ key: "TransitionScene" });
@@ -78,17 +80,17 @@ class TransitionScene extends Phaser.Scene {
     }
 }
 
-funkin.utils.TransitionScene = TransitionScene;
+// Registro nativo en el motor
 window.game.scene.add("TransitionScene", TransitionScene);
 
-// API Global
-funkin.transition = function(currentScene, targetSceneName) {
+// API Global corregida (Sin objeto funkin)
+window.transitionTo = function(currentScene, targetSceneName) {
     if (!currentScene || !currentScene.scene) {
-        console.warn("funkin.transition: Faltó pasar 'this' como primer parámetro.");
+        console.warn("transitionTo: Faltó pasar 'this' como primer parámetro.");
         return;
     }
 
-    const transitionScene = currentScene.scene.get("TransitionScene");
+    let transitionScene = currentScene.scene.get("TransitionScene");
     
     if (transitionScene) {
         if (!transitionScene.blackScreen) {

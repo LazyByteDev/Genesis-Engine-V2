@@ -51,7 +51,7 @@ class SoundTrayRenderer {
     }
 
     static handleInput(e) {
-        if (e && (Controls.checkAction(e, 'VOL_UP') || Controls.checkAction(e, 'VOL_DOWN') || Controls.checkAction(e, 'VOL_MUTE'))) return;
+        if (e && (Controls.VOL_UP(e) || Controls.VOL_DOWN(e) || Controls.VOL_MUTE(e))) return;
         
         if (this.isVisible && this.lastVol > 0 && !this.isMuted) {
             this.startHideTimer(500);
