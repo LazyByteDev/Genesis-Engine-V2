@@ -21,10 +21,16 @@
 
   // Data
   "src/funkin/DataSongs.js",
-  "src/funkin/play/data/playLoad.js",
 
-  // PlayScene
+  // PLAYSCENE
+  "src/funkin/play/PlayData.js",
   "src/funkin/play/PlayScene.js",
+  "src/funkin/play/data/song.js",
+  "src/funkin/play/referee/init.js",
+  "src/funkin/play/referee/update.js",
+  "src/funkin/play/referee/shutdown.js",
+  "src/funkin/play/referee/preload.js",
+  "src/funkin/play/data/skins.js",
 
   // intro
   "src/funkin/menu/intro/text.js",

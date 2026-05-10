@@ -1,7 +1,9 @@
 class IntroDanceScene extends Phaser.Scene {
   constructor() {
     super({ key: "introDance" });
+  }
 
+  init() {
     Object.assign(this, {
       logo: null,
       gf: null,
@@ -26,6 +28,13 @@ class IntroDanceScene extends Phaser.Scene {
       logoColorMatrix: null,
       confirmTimer: null,
       startedTransition: false,
+
+      // Variables de ventana
+      fnfBuffer: "",
+      infinityActive: false,
+      infinityTime: 0,
+      originalWinPos: null,
+      isMovingWindow: false,
     });
   }
 
@@ -83,6 +92,19 @@ class IntroDanceScene extends Phaser.Scene {
       this.hueAngle = (this.hueAngle + delta * 0.1) % 360;
       this.gfColorMatrix?.hue(this.hueAngle);
       this.logoColorMatrix?.hue(this.hueAngle);
+    }
+
+    if (this.infinityActive && typeof Neutralino !== "undefined") {
+      this.infinityTime += delta * 0.003;
+      if (!this.isMovingWindow && this.originalWinPos) {
+        this.isMovingWindow = true;
+        const nx = this.originalWinPos.x + 200 * Math.sin(this.infinityTime);
+        const ny =
+          this.originalWinPos.y + 100 * Math.sin(2 * this.infinityTime);
+        Neutralino.window.move(Math.round(nx), Math.round(ny)).finally(() => {
+          this.isMovingWindow = false;
+        });
+      }
     }
   }
 
@@ -164,12 +186,38 @@ class IntroDanceScene extends Phaser.Scene {
     if (this.transitioning)
       return Controls.ACCEPT(e) && this.skipConfirmDelay();
 
+    if (e.key) {
+      this.fnfBuffer += e.key.toLowerCase();
+      if (this.fnfBuffer.length > 3) this.fnfBuffer = this.fnfBuffer.slice(-3);
+      if (this.fnfBuffer === "fnf") {
+        this.toggleInfinityWindow();
+        this.fnfBuffer = "";
+      }
+    }
+
     ["UI_LEFT", "UI_RIGHT", "UI_UP", "UI_DOWN"].forEach(
       (k) => Controls[k](e) && this.checkSecretCode(k),
     );
 
     if (Controls.ACCEPT(e)) this.confirmSelection();
     if (Controls.BACK(e)) this.gotoback();
+  }
+
+  async toggleInfinityWindow() {
+    if (typeof Neutralino === "undefined") return;
+
+    if (this.infinityActive) {
+      this.infinityActive = false;
+      if (this.originalWinPos) {
+        Neutralino.window.move(this.originalWinPos.x, this.originalWinPos.y);
+      }
+    } else {
+      try {
+        this.originalWinPos = await Neutralino.window.getPosition();
+        this.infinityTime = 0;
+        this.infinityActive = true;
+      } catch (err) {}
+    }
   }
 
   gotoback() {
@@ -243,9 +291,22 @@ class IntroDanceScene extends Phaser.Scene {
       this.confirmTimer.remove();
       this.confirmTimer = null;
     }
+    if (
+      this.infinityActive &&
+      typeof Neutralino !== "undefined" &&
+      this.originalWinPos
+    ) {
+      this.infinityActive = false;
+      Neutralino.window.move(this.originalWinPos.x, this.originalWinPos.y);
+    }
+
+    if (this.gf) this.gf.postFX?.clear();
+    if (this.logo) this.logo.postFX?.clear();
 
     this.cameras.main?.fadeEffect?.reset();
     this.cameras.main?.flashEffect?.reset();
+    this.cameras.main?.clearFX();
+
     this.tweens.killAll();
   }
 }

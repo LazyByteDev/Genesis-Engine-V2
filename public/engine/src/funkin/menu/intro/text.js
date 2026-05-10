@@ -12,10 +12,16 @@ class IntroTextScene extends Phaser.Scene {
     this.lineSpacing = 55;
     this.introEvents = [];
     this.currentEventIndex = 0;
-    this._waitingToSkip = false; // Flag para evitar que el salto se llame múltiples veces
+    this._waitingToSkip = false;
   }
 
   preload() {
+    // CARGA DE FUENTE VCR MEDIANTE LA API NATIVA DE JAVASCRIPT
+    const vcrFont = new FontFace('vcr', `url(${Path.fonts}vcr.ttf)`);
+    vcrFont.load().then((loadedFont) => {
+        document.fonts.add(loadedFont);
+    }).catch((err) => console.warn("Error al cargar la fuente VCR:", err));
+
     Alphabet.load(this);
     this.load.json("introData", Path.dataUI + "intro.json");
     this.load.text("randomText", Path.dataUI + "randomText.txt");
@@ -32,20 +38,17 @@ class IntroTextScene extends Phaser.Scene {
         });
       }
     });
+
     const loadAtlas = (k, f) =>
-      this.load.atlasXML(
-        k,
-        `${Path.menu}intro/${f}.png`,
-        `${Path.menu}intro/${f}.xml`,
-      );
+      this.load.atlasXML(k, `${Path.menu}intro/${f}.png`, `${Path.menu}intro/${f}.xml`);
+
     loadAtlas("logoBumpin", "logoBumpin");
     loadAtlas("gfDanceTitle", "gfDanceTitle");
     loadAtlas("titleText", "titleEnter");
 
-    // Carga de Audios dinámica
     this.load.audio("confirmMenu", `${Path.sounds}menu/confirmMenu.ogg`);
     ["girlfriendsRingtone", "freakyMenu"].forEach((m) =>
-      this.load.audio(m, `${Path.music}${m}.ogg`),
+      this.load.audio(m, `${Path.music}${m}.ogg`)
     );
   }
 
@@ -71,10 +74,7 @@ class IntroTextScene extends Phaser.Scene {
     }
 
     this.introEvents = sequence.steps
-      .map((step) => ({
-        ...step,
-        targetTime: step.beat * beatTime,
-      }))
+      .map((step) => ({ ...step, targetTime: step.beat * beatTime }))
       .sort((a, b) => a.targetTime - b.targetTime);
 
     this.music = this.sound.add("introMusic", { loop: true });
@@ -88,10 +88,7 @@ class IntroTextScene extends Phaser.Scene {
 
   update() {
     if (this.sceneEnded) return;
-
-    if (this.music && this.music.isPlaying) {
-      Conductor.update(this.music.seek * 1000);
-    }
+    if (this.music && this.music.isPlaying) Conductor.update(this.music.seek * 1000);
 
     const currentSongTime = this.music ? this.music.seek * 1000 : 0;
 
@@ -103,25 +100,12 @@ class IntroTextScene extends Phaser.Scene {
       } else break;
     }
 
-    // ARREGLO: Autotransición cuando se terminan de mostrar todos los textos
-    if (
-      this.currentEventIndex >= this.introEvents.length &&
-      !this._waitingToSkip &&
-      !this.sceneEnded
-    ) {
+    if (this.currentEventIndex >= this.introEvents.length && !this._waitingToSkip && !this.sceneEnded) {
       this._waitingToSkip = true;
-      // Saltamos automáticamente después de que pase 1 beat extra
-      this.time.delayedCall(Conductor.beatLengthMs, () => {
-        this.skipIntro();
-      });
+      this.time.delayedCall(Conductor.beatLengthMs, () => { this.skipIntro(); });
     }
 
-    // ARREGLO: Transición forzada en el beat 16 (Comportamiento estándar de FNF)
-    if (
-      Conductor.currentBeat >= 16 &&
-      !this._waitingToSkip &&
-      !this.sceneEnded
-    ) {
+    if (Conductor.currentBeat >= 16 && !this._waitingToSkip && !this.sceneEnded) {
       this.skipIntro();
     }
   }
@@ -136,14 +120,8 @@ class IntroTextScene extends Phaser.Scene {
     if (step.text) step.text.forEach((line) => this.displayTextLine(line));
     if (step.img) {
       if (this.imageObj) this.imageObj.destroy();
-      this.imageObj = this.add
-        .image(
-          this.cameras.main.width / 2,
-          this.startY + this.currentYOffset + 80,
-          step.img.id,
-        )
-        .setOrigin(0.5)
-        .setScale(step.img.scale || 1);
+      this.imageObj = this.add.image(this.cameras.main.width / 2, this.startY + this.currentYOffset + 80, step.img.id)
+        .setOrigin(0.5).setScale(step.img.scale || 1);
       this.currentYOffset += 100;
     }
     if (step.action) {
@@ -151,9 +129,7 @@ class IntroTextScene extends Phaser.Scene {
         this.currentRandomPair = this.getRandomTextPair();
         this.displayTextLine(this.currentRandomPair[0]);
       } else if (step.action === "random-text-2") {
-        this.displayTextLine(
-          this.currentRandomPair ? this.currentRandomPair[1] : "",
-        );
+        this.displayTextLine(this.currentRandomPair ? this.currentRandomPair[1] : "");
       } else if (step.action === "skipIntro") {
         this.skipIntro();
       }
@@ -164,36 +140,12 @@ class IntroTextScene extends Phaser.Scene {
     if (this.sceneEnded) return;
     this.sceneEnded = true;
     this._waitingToSkip = true;
-
-    this.attemptVibration(true);
-
-    // Inicia la escena de baile de GF de forma directa y fluida
     this.scene.start("introDance");
-  }
-
-  attemptVibration(condition) {
-    if (condition && navigator.vibrate) {
-      try {
-        if (
-          navigator.userActivation &&
-          navigator.userActivation.hasBeenActive
-        ) {
-          navigator.vibrate(70);
-        }
-      } catch (e) {}
-    }
   }
 
   displayTextLine(textString) {
     if (!textString) return;
-    const text = new window.Alphabet(
-      this,
-      0,
-      0,
-      textString.toUpperCase(),
-      true,
-      1,
-    );
+    const text = new window.Alphabet(this, 0, 0, textString.toUpperCase(), true, 1);
     text.x = this.cameras.main.width / 2 - text.width / 2;
     text.y = this.startY + this.currentYOffset;
     this.texts.push(text);
@@ -201,16 +153,10 @@ class IntroTextScene extends Phaser.Scene {
   }
 
   getRandomTextPair() {
-    return this.randomTextPairs.length > 0
-      ? this.randomTextPairs[
-          Math.floor(Math.random() * this.randomTextPairs.length)
-        ]
-      : ["PART 1", "PART 2"];
+    return this.randomTextPairs.length > 0 ? this.randomTextPairs[Math.floor(Math.random() * this.randomTextPairs.length)] : ["PART 1", "PART 2"];
   }
 
   shutdown() {
-    // ARREGLO: Ya no detenemos la música aquí para que haga una transición perfecta
-    // al entrar en la escena de danceGF.
     this.texts.forEach((t) => t.destroy());
     if (this.imageObj) this.imageObj.destroy();
     window.removeEventListener("keydown", this.inputListener);
