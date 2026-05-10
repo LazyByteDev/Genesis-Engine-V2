@@ -9,7 +9,6 @@
   "src/core/phaser/wide.js",
 
   // utils
-  "src/utils/FullScreenScaleMode.js",
   "src/utils/Conductor.js",
   "src/utils/Path.js",
   "src/utils/Controls.js",
@@ -22,6 +21,10 @@
 
   // Data
   "src/funkin/DataSongs.js",
+  "src/funkin/play/data/playLoad.js",
+
+  // PlayScene
+  "src/funkin/play/PlayScene.js",
 
   // intro
   "src/funkin/menu/intro/text.js",

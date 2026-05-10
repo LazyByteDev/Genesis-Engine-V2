@@ -1,233 +1,390 @@
+// src/funkin/menu/free/FreeplayScene.js
+
 class FreeplayScene extends Phaser.Scene {
-    constructor() {
-        super({ key: 'FreeplayScene' });
-        
-        Object.assign(this, {
-            songsData: [], // Almacena { displayName, trackID, difficulties }
-            grpSongs: [],
-            selectedIndex: 0,
-            curSelectedFloat: 0, 
-            curDiffIndex: 0,
-            canInteract: false,
-            music: null,
-            score: 0
-        });
-    }
+  constructor() {
+    super({ key: "FreeplayScene" });
+  }
 
-    preload() {
-        this.load.image('menuBG', Path.menuBG + 'menuBG.png');
-        Alphabet.load(this);
+  preload() {
+    this.load.image("menuBGDesat", Path.menu + "bg/menuDesat.png");
+    this.load.audio("scrollMenu", Path.sounds + "menu/scrollMenu.ogg");
+    this.load.audio("confirmMenu", Path.sounds + "menu/confirmMenu.ogg");
+    this.load.audio("cancelMenu", Path.sounds + "menu/cancelMenu.ogg");
+    Alphabet.load(this);
+  }
 
-        this.load.audio('scrollMenu', Path.sounds + 'menu/scrollMenu.ogg');
-        this.load.audio('confirmMenu', Path.sounds + 'menu/confirmMenu.ogg');
-        this.load.audio('cancelMenu', Path.sounds + 'menu/cancelMenu.ogg');
-        this.load.audio('freakyMenu', Path.music + 'freakyMenu.ogg');
-    }
+  create() {
+    Alphabet.createAtlas(this);
 
-    create() {
-        const { width: w, height: h } = this.scale;
+    this.songsList = [];
+    this.alphabetGroup = [];
+    this.globalDifficulties = [];
+    this.currentDiffIndex = 0;
+    this.canInteract = false;
 
-        this.add.image(w / 2, h / 2, 'menuBG').setScale(1.2).setScrollFactor(0).setDepth(0);
+    const { width: w, height: h } = this.scale;
 
-        this.music = this.sound.getAllPlaying().find(s => ['introMusic', 'freakyMenu'].includes(s.key)) || this.sound.add('freakyMenu', { loop: true });
-        if (!this.music.isPlaying) this.music.play();
+    this.bg = this.add
+      .sprite(w / 2, h / 2, "menuBGDesat")
+      .setScrollFactor(0)
+      .setScale(1.2)
+      .setOrigin(0.5);
+    this.bgFlash = this.add
+      .sprite(w / 2, h / 2, "menuBGDesat")
+      .setScrollFactor(0)
+      .setScale(1.2)
+      .setOrigin(0.5)
+      .setTint(0xffffff)
+      .setVisible(false);
 
-        Alphabet.createAtlas(this);
+    this.populateSongs();
 
-        // --- RECOLECCIÓN DINÁMICA ---
-        DataSongs.weeksList.forEach(weekName => {
-            const weekData = DataSongs.getWeekData(weekName);
-            if (weekData) {
-                const tracks = weekData.songs || weekData.tracks || [];
-                tracks.forEach(trackInfo => {
-                    let rawName = Array.isArray(trackInfo) ? trackInfo[0] : trackInfo;
-                    const trackID = rawName.toLowerCase().replace(/\s+/g, '-');
-                    
-                    let displayName = DataSongs.getSongMeta(trackID, 'songName') || rawName;
-                    
-                    // Extraer las dificultades del objeto JSON de los metadatos
-                    let metaDiffs = DataSongs.getSongMeta(trackID, 'difficulties');
-                    let diffs = [];
-                    
-                    if (metaDiffs && typeof metaDiffs === 'object' && !Array.isArray(metaDiffs)) {
-                        // Si es un objeto (ej: {"easy":{}, "normal":{}}), sacamos las claves
-                        diffs = Object.keys(metaDiffs);
-                    } else if (Array.isArray(metaDiffs) && metaDiffs.length > 0) {
-                        // Respaldo por si en el futuro se usa como array
-                        diffs = metaDiffs;
-                    } else {
-                        // Fallback predeterminado
-                        diffs = ['easy', 'normal', 'hard'];
-                    }
-                    
-                    this.songsData.push({ 
-                        displayName: displayName, 
-                        trackID: trackID, 
-                        difficulties: diffs 
-                    });
-                });
-            }
-        });
+    this.songsList.forEach((song, i) => {
+      let textObj = new window.Alphabet(
+        this,
+        0,
+        0,
+        song.name.toUpperCase(),
+        true,
+        1,
+      );
+      textObj.y = i * 130 + h / 2.5;
+      textObj.x = 120;
+      textObj.alpha = 0;
+      this.alphabetGroup.push(textObj);
+    });
 
-        if (this.songsData.length === 0) {
-            console.warn("[Genesis] No se encontraron canciones. Creando fallback.");
-            this.songsData.push({
-                displayName: "NO SONGS\\nFOUND",
-                trackID: "none",
-                difficulties: ['normal']
-            });
+    this.scoreBG = this.add
+      .rectangle(w, 0, w * 0.4, 130, 0x000000, 0.6)
+      .setOrigin(1, 0)
+      .setDepth(100)
+      .setScrollFactor(0);
+
+    this.scoreText = this.add
+      .text(w - 15, 15, "", {
+        fontFamily: "vcr, monospace",
+        fontSize: "32px",
+        fill: "#ffffff",
+        align: "right",
+        lineSpacing: 5,
+      })
+      .setOrigin(1, 0)
+      .setDepth(101)
+      .setScrollFactor(0);
+
+    this.selectedIndex = window.FreeplayState_rememberedIndex || 0;
+
+    let currentDiff = this.globalDifficulties[this.currentDiffIndex];
+    this.selectedIndex = this.findClosestValidIndex(
+      this.selectedIndex,
+      currentDiff,
+    );
+    this.changeSelection(0, false);
+
+    this.canInteract = true;
+
+    this.inputListener = (e) => {
+      if (e.repeat) return;
+      this.handleInput(e);
+    };
+    window.addEventListener("keydown", this.inputListener);
+
+    this.input.on("wheel", (pointer, gameObjects, deltaX, deltaY) => {
+      if (!this.canInteract) return;
+      if (deltaY > 0) this.changeSelection(1);
+      else if (deltaY < 0) this.changeSelection(-1);
+    });
+
+    let startY = 0;
+    this.input.on("pointerdown", (pointer) => (startY = pointer.y));
+    this.input.on("pointerup", (pointer) => {
+      if (!this.canInteract || !window.isMobile) return;
+      let diffY = pointer.y - startY;
+      if (diffY < -30) this.changeSelection(1);
+      else if (diffY > 30) this.changeSelection(-1);
+      else if (Math.abs(diffY) < 10) this.confirmSelection();
+    });
+
+    this.events.once("shutdown", this.cleanup, this);
+  }
+
+  populateSongs() {
+    if (!window.DataSongs || !DataSongs.weeksList) return;
+
+    let diffSet = new Set();
+
+    DataSongs.weeksList.forEach((weekId) => {
+      let weekData = DataSongs.weeksData[weekId];
+      if (!weekData) return;
+
+      let addSong = (rawName, colorArr) => {
+        let trackID = rawName.toLowerCase().replace(/\s+/g, "-");
+        let metaName = window.DataSongs.getSongMeta(trackID, "songName");
+        let finalName = metaName ? metaName : rawName;
+
+        let metaDiffs = window.DataSongs.getSongMeta(trackID, "difficulties");
+        let diffs = ["easy", "normal", "hard"];
+
+        if (
+          metaDiffs &&
+          typeof metaDiffs === "object" &&
+          Object.keys(metaDiffs).length > 0
+        ) {
+          diffs = Object.keys(metaDiffs);
         }
 
-        // --- GENERACIÓN DE LISTA ---
-        const basePosX = w * 0.1;
-        const basePosY = h / 2;
+        diffs.forEach((d) => diffSet.add(d.toLowerCase()));
 
-        this.songsData.forEach((data, i) => {
-            let songContainer = this.add.container(basePosX, (i * 130) + basePosY);
-            
-            let lines = data.displayName.split('\\n');
-            lines.forEach((line, lineIdx) => {
-                let alphabetLine = new Alphabet(this, 0, lineIdx * 60, line.toUpperCase(), true);
-                songContainer.add(alphabetLine);
-            });
+        this.songsList.push({
+          name: finalName,
+          id: trackID,
+          color: colorArr || [146, 113, 253],
+          difficulties: diffs.map((d) => d.toLowerCase()),
+        });
+      };
 
-            this.add.existing(songContainer);
-            songContainer.setDepth(10);
-            this.grpSongs.push(songContainer);
+      if (weekData.songs && Array.isArray(weekData.songs)) {
+        weekData.songs.forEach((songData) => {
+          let rawName = Array.isArray(songData) ? songData[0] : songData;
+          let color =
+            Array.isArray(songData) && songData[2]
+              ? songData[2]
+              : [146, 113, 253];
+          addSong(rawName, color);
+        });
+      } else if (weekData.tracks && Array.isArray(weekData.tracks)) {
+        weekData.tracks.forEach((trackName) => addSong(trackName));
+      }
+    });
+
+    if (this.songsList.length === 0) {
+      this.songsList.push({
+        name: "Tutorial",
+        id: "tutorial",
+        color: [146, 113, 253],
+        difficulties: ["easy", "normal", "hard"],
+      });
+      diffSet = new Set(["easy", "normal", "hard"]);
+    }
+
+    const order = ["easy", "normal", "hard", "erect", "nightmare"];
+    this.globalDifficulties = Array.from(diffSet).sort((a, b) => {
+      let idxA = order.indexOf(a);
+      let idxB = order.indexOf(b);
+      if (idxA === -1) idxA = 99;
+      if (idxB === -1) idxB = 99;
+      return idxA - idxB;
+    });
+
+    if (this.globalDifficulties.length === 0)
+      this.globalDifficulties = ["normal"];
+    this.currentDiffIndex = this.globalDifficulties.indexOf("normal");
+    if (this.currentDiffIndex === -1) this.currentDiffIndex = 0;
+  }
+
+  updateScoreText() {
+    if (this.songsList.length === 0) return;
+
+    let song = this.songsList[this.selectedIndex];
+    let diffName = this.globalDifficulties[this.currentDiffIndex].toUpperCase();
+
+    let score =
+      localStorage.getItem(`genesis_score_${song.id}_${diffName}`) || 0;
+    let accuracy =
+      localStorage.getItem(`genesis_acc_${song.id}_${diffName}`) || "0.00";
+
+    this.scoreText.setText(
+      `SCORE: ${score}\nACCURACY: ${accuracy}%\n< ${diffName} >`,
+    );
+  }
+
+  update(time, delta) {
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const dt = delta * 0.01;
+    let currentDiff = this.globalDifficulties[this.currentDiffIndex];
+
+    let selectedVisualIndex = 0;
+    let visualIndex = 0;
+
+    for (let i = 0; i < this.songsList.length; i++) {
+      if (this.songsList[i].difficulties.includes(currentDiff)) {
+        if (i === this.selectedIndex) selectedVisualIndex = visualIndex;
+        visualIndex++;
+      }
+    }
+
+    visualIndex = 0;
+    for (let i = 0; i < this.songsList.length; i++) {
+      let song = this.songsList[i];
+      let item = this.alphabetGroup[i];
+      let isValid = song.difficulties.includes(currentDiff);
+
+      if (isValid) {
+        let relIndex = visualIndex - selectedVisualIndex;
+        let targetY = relIndex * 130 + this.scale.height / 2.5;
+        let targetX = i === this.selectedIndex ? 150 : 120;
+        let targetAlpha = i === this.selectedIndex ? 1 : 0.6;
+
+        item.y = lerp(item.y, targetY, dt * 1.5);
+        item.x = lerp(item.x, targetX, dt * 1.5);
+        item.alpha = lerp(item.alpha, targetAlpha, dt * 1.5);
+        visualIndex++;
+      } else {
+        item.x = lerp(item.x, -100, dt * 1.5);
+        item.alpha = lerp(item.alpha, 0, dt * 1.5);
+      }
+    }
+  }
+
+  handleInput(e) {
+    if (!this.canInteract) return;
+
+    if (Controls.UI_UP(e)) this.changeSelection(-1);
+    else if (Controls.UI_DOWN(e)) this.changeSelection(1);
+    else if (Controls.UI_LEFT(e)) this.changeDiff(-1);
+    else if (Controls.UI_RIGHT(e)) this.changeDiff(1);
+    else if (Controls.ACCEPT(e)) this.confirmSelection();
+    else if (Controls.BACK(e)) this.goBack();
+  }
+
+  findClosestValidIndex(currentIndex, targetDiff) {
+    if (this.songsList[currentIndex].difficulties.includes(targetDiff))
+      return currentIndex;
+
+    let len = this.songsList.length;
+    for (let i = 1; i <= len; i++) {
+      let forward = (currentIndex + i) % len;
+      if (this.songsList[forward].difficulties.includes(targetDiff))
+        return forward;
+
+      let backward = (currentIndex - i + len) % len;
+      if (this.songsList[backward].difficulties.includes(targetDiff))
+        return backward;
+    }
+    return currentIndex;
+  }
+
+  changeDiff(change) {
+    this.currentDiffIndex += change;
+    if (this.currentDiffIndex < 0)
+      this.currentDiffIndex = this.globalDifficulties.length - 1;
+    if (this.currentDiffIndex >= this.globalDifficulties.length)
+      this.currentDiffIndex = 0;
+
+    let currentDiff = this.globalDifficulties[this.currentDiffIndex];
+    this.sound.play("scrollMenu");
+
+    if (
+      !this.songsList[this.selectedIndex].difficulties.includes(currentDiff)
+    ) {
+      this.selectedIndex = this.findClosestValidIndex(
+        this.selectedIndex,
+        currentDiff,
+      );
+      this.changeSelection(0, false);
+    } else {
+      this.updateScoreText();
+    }
+  }
+
+  changeSelection(change, playSound = true) {
+    let currentDiff = this.globalDifficulties[this.currentDiffIndex];
+    let newIndex = this.selectedIndex;
+
+    if (change !== 0) {
+      let loopCount = 0;
+      do {
+        newIndex += change;
+        if (newIndex < 0) newIndex = this.songsList.length - 1;
+        if (newIndex >= this.songsList.length) newIndex = 0;
+        loopCount++;
+      } while (
+        !this.songsList[newIndex].difficulties.includes(currentDiff) &&
+        loopCount <= this.songsList.length
+      );
+
+      if (loopCount > this.songsList.length) return;
+    }
+
+    if (change !== 0 && playSound) this.sound.play("scrollMenu");
+    this.selectedIndex = newIndex;
+
+    let songColors = this.songsList[this.selectedIndex].color;
+    if (songColors && songColors.length === 3) {
+      let hexColor = Phaser.Display.Color.GetColor(
+        songColors[0],
+        songColors[1],
+        songColors[2],
+      );
+      this.bg.setTint(hexColor);
+    }
+
+    this.updateScoreText();
+  }
+
+  confirmSelection() {
+    this.canInteract = false;
+    this.sound.play("confirmMenu");
+    window.FreeplayState_rememberedIndex = this.selectedIndex;
+
+    let selectedSong = this.songsList[this.selectedIndex];
+    let item = this.alphabetGroup[this.selectedIndex];
+    let selectedDiff = this.globalDifficulties[this.currentDiffIndex];
+
+    this.flicker(this.bgFlash, 1100, 150, false, null, false);
+
+    this.flicker(
+      item,
+      1000,
+      60,
+      true,
+      () => {
+        this.registry.set("playLoadData", {
+          CurrentSong: selectedSong.id,
+          Difficulty: selectedDiff.toLowerCase(),
+          SceneOrigin: "freeplay",
         });
 
-        // --- UI DE DIFICULTAD Y SCORE ---
-        this.uiCont = this.add.container(w, 0).setScrollFactor(0).setDepth(20);
+        if (window.transitionTo) window.transitionTo(this, "PlayScene");
+        else this.scene.start("PlayScene");
+      },
+      true,
+    );
+  }
 
-        // Recuadro simplificado (sin bordes redondeados ni delineados complejos)
-        let bgUI = this.add.graphics();
-        bgUI.fillStyle(0x000000, 0.7);
-        bgUI.fillRect(-280, 0, 280, 120);
-        this.uiCont.add(bgUI);
+  flicker(target, duration, interval, endState, onComplete, useAlpha = false) {
+    let count = Math.floor(duration / interval);
+    this.time.addEvent({
+      delay: interval,
+      repeat: count,
+      callback: () => {
+        if (useAlpha) {
+          target.alpha = target.alpha > 0.5 ? 0 : 1;
+        } else {
+          target.visible = !target.visible;
+        }
 
-        this.diffText = this.add.text(-140, 35, '< NORMAL >', {
-            fontFamily: 'vcr',
-            fontSize: '32px',
-            color: '#ffffff'
-        }).setOrigin(0.5);
+        if (count-- <= 0) {
+          if (useAlpha) target.alpha = endState ? 1 : 0;
+          else target.visible = endState;
 
-        this.scoreText = this.add.text(-140, 80, 'SCORE: 0', {
-            fontFamily: 'vcr',
-            fontSize: '24px',
-            color: '#ffffff'
-        }).setOrigin(0.5);
+          if (onComplete) onComplete();
+        }
+      },
+    });
+  }
 
-        this.uiCont.add([this.diffText, this.scoreText]);
+  goBack() {
+    this.canInteract = false;
+    this.sound.play("cancelMenu");
+    if (window.transitionTo) window.transitionTo(this, "MainMenuScene");
+    else this.scene.start("MainMenuScene");
+  }
 
-        this.changeSelection(0, false);
-        this.canInteract = true;
-        this.setupInputs();
-        this.events.once('shutdown', this.cleanup, this);
-    }
-
-    update(time, delta) {
-        if (this.music?.isPlaying) Conductor.update(this.music.seek * 1000);
-
-        const dt = delta / 1000;
-        this.curSelectedFloat = Phaser.Math.Linear(this.curSelectedFloat, this.selectedIndex, dt * 10);
-
-        const basePosX = this.scale.width * 0.1;
-        const basePosY = this.scale.height / 2;
-
-        this.grpSongs.forEach((item, i) => {
-            let indexDiff = i - this.curSelectedFloat;
-            let targetY = (indexDiff * 130) + basePosY;
-            let targetX = (Math.sin(indexDiff) * 60) + basePosX;
-
-            if (i !== this.selectedIndex) targetX += 30;
-
-            item.x = Phaser.Math.Linear(item.x, targetX, dt * 10);
-            item.y = Phaser.Math.Linear(item.y, targetY, dt * 10);
-            item.alpha = (i === this.selectedIndex) ? 1 : 0.6;
-        });
-    }
-
-    setupInputs() {
-        this.inputListener = (e) => {
-            if (!this.canInteract) return;
-
-            if (Controls.UI_UP(e)) this.changeSelection(-1);
-            else if (Controls.UI_DOWN(e)) this.changeSelection(1);
-            else if (Controls.UI_LEFT(e)) this.changeDiff(-1);
-            else if (Controls.UI_RIGHT(e)) this.changeDiff(1);
-            else if (Controls.ACCEPT(e)) this.confirmSelection();
-            else if (Controls.BACK(e)) this.goBack();
-        };
-        window.addEventListener('keydown', this.inputListener);
-
-        this.input.on('wheel', (p, go, dx, dy) => {
-            if (this.canInteract) this.changeSelection(dy > 0 ? 1 : -1);
-        });
-    }
-
-    changeSelection(change, playSound = true) {
-        if (change !== 0 && playSound) this.sound.play('scrollMenu');
-        this.selectedIndex = Phaser.Math.Wrap(this.selectedIndex + change, 0, this.songsData.length);
-        
-        this.curDiffIndex = 0;
-        this.updateDiffUI();
-    }
-
-    changeDiff(change) {
-        const diffs = this.songsData[this.selectedIndex].difficulties;
-        if (diffs.length <= 1) return;
-
-        this.sound.play('scrollMenu');
-        this.curDiffIndex = Phaser.Math.Wrap(this.curDiffIndex + change, 0, diffs.length);
-        this.updateDiffUI();
-    }
-
-    updateDiffUI() {
-        if (this.songsData.length === 0) return;
-        
-        const data = this.songsData[this.selectedIndex];
-        const diffName = data.difficulties[this.curDiffIndex] || 'NORMAL';
-        
-        this.diffText.setText('< ' + diffName.toUpperCase() + ' >');
-        this.scoreText.setText('SCORE: ' + this.score);
-    }
-
-    confirmSelection() {
-        this.canInteract = false;
-        this.sound.play('confirmMenu');
-
-        this.time.addEvent({
-            delay: 60,
-            repeat: 10,
-            callback: () => {
-                let target = this.grpSongs[this.selectedIndex];
-                target.alpha = (target.alpha === 1) ? 0 : 1;
-            },
-            onComplete: () => {
-                this.grpSongs[this.selectedIndex].alpha = 1;
-                this.executeTransition();
-            }
-        });
-    }
-
-    executeTransition() {
-        const data = this.songsData[this.selectedIndex];
-        const diff = data.difficulties[this.curDiffIndex] || 'NORMAL';
-        console.log(`[Genesis] Play: ${data.trackID} | Diff: ${diff}`);
-        
-        this.time.delayedCall(500, () => { this.canInteract = true; });
-    }
-
-    goBack() {
-        this.canInteract = false;
-        this.sound.play('cancelMenu');
-        window.transitionTo(this, 'MainMenuScene');
-    }
-
-    cleanup() {
-        window.removeEventListener('keydown', this.inputListener);
-    }
+  cleanup() {
+    window.removeEventListener("keydown", this.inputListener);
+  }
 }
 
 window.FreeplayScene = FreeplayScene;
-window.game.scene.add('FreeplayScene', window.FreeplayScene);
+window.game.scene.add("FreeplayScene", window.FreeplayScene);

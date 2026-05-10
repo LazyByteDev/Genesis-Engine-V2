@@ -44,11 +44,17 @@ class TransitionScene extends Phaser.Scene {
     }
 
     startTransition(callingScene, nextScene) {
-        if (this.isTransitioning) return;
+        // En lugar de hacer 'return' si está bloqueada, forzamos la animación
+        // Esto evita el softlock si el booleano se quedó pegado en true.
         this.isTransitioning = true;
-
         this.scene.bringToTop();
+
+        // Destruimos animaciones antiguas para que no interfieran
+        this.tweens.killTweensOf(this.blackScreen);
+
+        // Reseteamos posición y alpha siempre desde cero
         this.blackScreen.setAlpha(1);
+        this.blackScreen.y = this.scale.height * 1.5; 
 
         this.tweens.add({
             targets: this.blackScreen,
@@ -83,7 +89,7 @@ class TransitionScene extends Phaser.Scene {
 // Registro nativo en el motor
 window.game.scene.add("TransitionScene", TransitionScene);
 
-// API Global corregida (Sin objeto funkin)
+// API Global corregida
 window.transitionTo = function(currentScene, targetSceneName) {
     if (!currentScene || !currentScene.scene) {
         console.warn("transitionTo: Faltó pasar 'this' como primer parámetro.");
@@ -93,8 +99,15 @@ window.transitionTo = function(currentScene, targetSceneName) {
     let transitionScene = currentScene.scene.get("TransitionScene");
     
     if (transitionScene) {
-        if (!transitionScene.blackScreen) {
+        // Si la escena de transición está dormida o inactiva, la despertamos
+        if (currentScene.scene.isSleeping("TransitionScene")) {
+            currentScene.scene.wake("TransitionScene");
+        } else if (!currentScene.scene.isActive("TransitionScene")) {
             currentScene.scene.launch("TransitionScene");
+        }
+
+        // Ejecutamos la transición. Si el blackScreen aún no se crea, damos un respiro
+        if (!transitionScene.blackScreen) {
             currentScene.time.delayedCall(50, () => { 
                 transitionScene.startTransition(currentScene, targetSceneName); 
             });

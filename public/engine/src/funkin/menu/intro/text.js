@@ -32,6 +32,21 @@ class IntroTextScene extends Phaser.Scene {
         });
       }
     });
+    const loadAtlas = (k, f) =>
+      this.load.atlasXML(
+        k,
+        `${Path.menu}intro/${f}.png`,
+        `${Path.menu}intro/${f}.xml`,
+      );
+    loadAtlas("logoBumpin", "logoBumpin");
+    loadAtlas("gfDanceTitle", "gfDanceTitle");
+    loadAtlas("titleText", "titleEnter");
+
+    // Carga de Audios dinámica
+    this.load.audio("confirmMenu", `${Path.sounds}menu/confirmMenu.ogg`);
+    ["girlfriendsRingtone", "freakyMenu"].forEach((m) =>
+      this.load.audio(m, `${Path.music}${m}.ogg`),
+    );
   }
 
   create() {
@@ -89,7 +104,11 @@ class IntroTextScene extends Phaser.Scene {
     }
 
     // ARREGLO: Autotransición cuando se terminan de mostrar todos los textos
-    if (this.currentEventIndex >= this.introEvents.length && !this._waitingToSkip && !this.sceneEnded) {
+    if (
+      this.currentEventIndex >= this.introEvents.length &&
+      !this._waitingToSkip &&
+      !this.sceneEnded
+    ) {
       this._waitingToSkip = true;
       // Saltamos automáticamente después de que pase 1 beat extra
       this.time.delayedCall(Conductor.beatLengthMs, () => {
@@ -98,7 +117,11 @@ class IntroTextScene extends Phaser.Scene {
     }
 
     // ARREGLO: Transición forzada en el beat 16 (Comportamiento estándar de FNF)
-    if (Conductor.currentBeat >= 16 && !this._waitingToSkip && !this.sceneEnded) {
+    if (
+      Conductor.currentBeat >= 16 &&
+      !this._waitingToSkip &&
+      !this.sceneEnded
+    ) {
       this.skipIntro();
     }
   }
@@ -194,6 +217,6 @@ class IntroTextScene extends Phaser.Scene {
   }
 }
 
-DataSongs.loadWeeks()
+DataSongs.loadWeeks();
 window.IntroTextScene = IntroTextScene;
 window.game.scene.add("IntroTextScene", window.IntroTextScene, true);
