@@ -22,7 +22,7 @@ class Song {
         const pd = scene.playData;
 
         this.bpm = pd.get('audio.bpm', 100);
-        this.origin = pd.origin; // Guardamos el origen (freeplay, etc)
+        this.origin = pd.origin;
         this.needsVoices = pd.get('audio.needsVoices', true);
         this.multiVocal = pd.get('audio.multiVocal', false);
 
@@ -30,14 +30,18 @@ class Song {
         this.playerTrack = null;
         this.opponentTrack = null;
 
+        // Configurar pistas en memoria
         this.setupTracks();
-        this.play();
+
+        // NUEVO: Escuchamos el evento del CountDown para reproducir
+        this.scene.events.once('startSong', () => {
+            this.play();
+        });
     }
 
     setupTracks() {
         this.instTrack = this.scene.sound.add('inst');
 
-        // Al terminar la canción, volvemos al origen
         this.instTrack.on('complete', () => {
             this.onSongEnd();
         });
@@ -49,7 +53,6 @@ class Song {
     }
 
     play() {
-        // Cambiar BPM en el Conductor al iniciar
         window.Conductor.mapTimeChanges([
             new window.SongTimeChange(0, this.bpm, 4, 4)
         ]);
@@ -62,16 +65,11 @@ class Song {
     }
 
     onSongEnd() {
-        // Resetear BPM a 102
         window.Conductor.mapTimeChanges([
             new window.SongTimeChange(0, 102, 4, 4)
         ]);
 
-        // Determinar escena de destino
         const target = this.origin === 'freeplay' ? 'FreeplayScene' : 'MainMenuScene';
-
-        console.log(`[Song] Fin. Volviendo a ${target} y reseteando BPM.`);
-
         if (window.transitionTo) {
             window.transitionTo(this.scene, target);
         } else {
@@ -82,10 +80,8 @@ class Song {
     update(time, delta) {
         if (!this.instTrack || !this.instTrack.isPlaying) return;
 
-        // Actualizar posición del Conductor basada en la música
         window.Conductor.update(this.instTrack.seek * 1000);
 
-        // Sincronización de voces
         const masterTime = this.instTrack.seek;
         if (this.playerTrack?.isPlaying && Math.abs(this.playerTrack.seek - masterTime) > 0.02) {
             this.playerTrack.seek = masterTime;

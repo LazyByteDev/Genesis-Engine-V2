@@ -1,5 +1,9 @@
+// src/funkin/play/PlayData.js
+
 class PlayData {
     constructor(scene) {
+        this.scene = scene;
+
         // Extraemos los datos del Registry inyectados por el menú
         const rawData = scene.registry.get('playLoadData') || {
             CurrentSong: "tutorial",
@@ -42,13 +46,28 @@ class PlayData {
      */
     get(path, defaultValue = null) {
         if (!path) return this.mergedData;
+
+        // Compatibilidad directa con los Referees y Charts
+        if (path === 'song') return this.songId;
+        if (path === 'difficulty') return this.difficulty;
+
         const result = path.split('.').reduce((prev, curr) =>
             (prev && prev[curr] !== undefined) ? prev[curr] : undefined, this.mergedData
         );
         return result !== undefined ? result : defaultValue;
     }
 
-    _deepClone(obj) { return JSON.parse(JSON.stringify(obj)); }
+    /**
+     * Integración Chart: Obtiene la ruta del archivo notes.json
+     * basado en la canción actual.
+     */
+    getChartPath() {
+        return `${window.Path.songs}${this.songId}/charts/notes.json`;
+    }
+
+    _deepClone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+    }
 
     _deepMerge(target, source) {
         let output = Object.assign({}, target);
@@ -65,7 +84,9 @@ class PlayData {
         return output;
     }
 
-    _isObject(item) { return (item && typeof item === 'object' && !Array.isArray(item)); }
+    _isObject(item) {
+        return (item && typeof item === 'object' && !Array.isArray(item));
+    }
 }
 
 window.PlayData = PlayData;

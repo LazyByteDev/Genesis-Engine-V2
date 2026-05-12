@@ -18,19 +18,39 @@
   "src/utils/soundtray/main.js",
   "src/utils/soundtray/renderer.js",
   "src/utils/visuals/TransitionScene.js",
+  "src/utils/toast.js",
 
   // Data
   "src/funkin/DataSongs.js",
 
   // PLAYSCENE
   "src/funkin/play/PlayData.js",
+  "src/funkin/play/Cameras.js",
+
   "src/funkin/play/PlayScene.js",
+  "src/funkin/play/data/chart.js",
   "src/funkin/play/data/song.js",
+  "src/funkin/play/data/stage.js",
+  "src/funkin/play/data/skins.js",
+
   "src/funkin/play/referee/init.js",
   "src/funkin/play/referee/update.js",
   "src/funkin/play/referee/shutdown.js",
   "src/funkin/play/referee/preload.js",
-  "src/funkin/play/data/skins.js",
+
+  "src/funkin/play/UI/countDown/renderer.js",
+  "src/funkin/play/UI/countDown/logic.js",
+
+  "src/funkin/play/stage/images.js",
+  "src/funkin/play/stage/xml.js",
+  "src/funkin/play/stage/props.js",
+
+  "src/funkin/play/UI/arrows/directions.js",
+  "src/funkin/play/UI/arrows/strumlines/renderer.js",
+  "src/funkin/play/UI/arrows/strumlines/logic.js",
+
+  "src/funkin/play/UI/arrows/notes/renderer.js",
+  "src/funkin/play/UI/arrows/notes/logic.js",
 
   // intro
   "src/funkin/menu/intro/text.js",

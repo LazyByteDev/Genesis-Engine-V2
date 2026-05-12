@@ -4,7 +4,7 @@ class MainMenuScene extends Phaser.Scene {
     }
 
     preload() {
-        // Rutas de fondo 
+        // Rutas de fondo
         this.load.image('menuBG', Path.menu + 'bg/menuBG.png');
         this.load.image('menuBGMagenta', Path.menu + 'bg/menuDesat.png');
 
@@ -19,7 +19,7 @@ class MainMenuScene extends Phaser.Scene {
         this.load.audio('scrollMenu', Path.sounds + 'menu/scrollMenu.ogg');
         this.load.audio('confirmMenu', Path.sounds + 'menu/confirmMenu.ogg');
         this.load.audio('cancelMenu', Path.sounds + 'menu/cancelMenu.ogg');
-        
+
         // Pista base
         this.load.audio('freakyMenu', Path.music + 'freakyMenu.ogg');
     }
@@ -62,7 +62,7 @@ class MainMenuScene extends Phaser.Scene {
         this.canInteract = true;
 
         // --- ENTRADAS ---
-        
+
         // 1. Teclado / Gamepad
         this.inputListener = (e) => this.handleInput(e);
         window.addEventListener('keydown', this.inputListener);
@@ -79,12 +79,12 @@ class MainMenuScene extends Phaser.Scene {
         this.input.on('pointerdown', (pointer) => {
             startY = pointer.y;
         });
-        
+
         this.input.on('pointerup', (pointer) => {
             if (!this.canInteract || !window.isMobile) return;
-            
+
             let diffY = pointer.y - startY;
-            
+
             // Umbral de 30 píxeles para considerar que fue un deslizamiento
             if (diffY < -30) {
                 this.changeSelection(1); // Deslizar arriba -> bajar en el menú
@@ -106,21 +106,21 @@ class MainMenuScene extends Phaser.Scene {
 
     createAnims(key) {
         if (this.anims.exists(key + '_idle')) return;
-        
+
         const frameNames = this.textures.get(key).getFrameNames();
-        
+
         // Filtro flexible: extrae cualquier frame que contenga "idle" o "basic"
         const idleFrames = frameNames
             .filter(f => f.toLowerCase().includes('idle') || f.toLowerCase().includes('basic'))
             .sort()
             .map(f => ({ key, frame: f }));
-            
+
         // Filtro flexible: extrae cualquier frame que contenga "selected" o "white"
         const selectedFrames = frameNames
             .filter(f => f.toLowerCase().includes('selected') || f.toLowerCase().includes('white'))
             .sort()
             .map(f => ({ key, frame: f }));
-        
+
         if (idleFrames.length > 0) {
             this.anims.create({ key: key + '_idle', frames: idleFrames, frameRate: 24, repeat: -1 });
         }
@@ -131,28 +131,28 @@ class MainMenuScene extends Phaser.Scene {
 
     handleInput(e) {
         if (!this.canInteract) return;
-        
+
         if (Controls.UI_UP(e)) this.changeSelection(-1);
         else if (Controls.UI_DOWN(e)) this.changeSelection(1);
         else if (Controls.ACCEPT(e)) this.confirmSelection();
-        else if (Controls.BACK(e)) this.goBack(); 
+        else if (Controls.BACK(e)) this.goBack();
     }
 
     changeSelection(change, playSound = true) {
         if (change !== 0 && playSound) this.sound.play('scrollMenu');
-        
+
         this.selectedIndex = Phaser.Math.Wrap(this.selectedIndex + change, 0, this.menuItems.length);
 
         this.menuItems.forEach((item, i) => {
             const isSelected = i === this.selectedIndex;
             const animKey = item.nameID + (isSelected ? '_selected' : '_idle');
-            
+
             if (this.anims.exists(animKey)) {
                 item.play(animKey, true);
             } else {
                 console.warn(`[MainMenu] Animación ${animKey} no encontrada para ${item.nameID}`);
             }
-            
+
             if (isSelected) this.camFollow.setPosition(item.x, item.y);
         });
     }
@@ -163,7 +163,7 @@ class MainMenuScene extends Phaser.Scene {
         window.MainMenuState_rememberedIndex = this.selectedIndex;
 
         const selectedItem = this.menuItems[this.selectedIndex];
-        
+
         this.flicker(this.magenta, 1100, 150, false);
         this.flicker(selectedItem, 1000, 60, true, () => this.executeTransition(selectedItem.nameID));
 
@@ -177,7 +177,7 @@ class MainMenuScene extends Phaser.Scene {
     flicker(target, duration, interval, endVisible, onComplete) {
         if (!target) return;
         let count = Math.floor(duration / interval);
-        
+
         this.time.addEvent({
             delay: interval,
             repeat: count,
@@ -192,14 +192,14 @@ class MainMenuScene extends Phaser.Scene {
     }
 
     executeTransition(id) {
-        const scenes = { 
-            storymode: 'StoryMenuScene', 
-            freeplay: 'FreeplayScene', 
-            options: 'OptionsScene', 
-            credits: 'CreditsScene' 
+        const scenes = {
+            storymode: 'StoryMenuScene',
+            freeplay: 'FreeplayScene',
+            options: 'OptionsScene',
+            credits: 'CreditsScene'
         };
         const nextScene = scenes[id] || id;
-        
+
         if (window.transitionTo) {
             window.transitionTo(this, nextScene);
         } else {
@@ -210,7 +210,7 @@ class MainMenuScene extends Phaser.Scene {
     goBack() {
         this.canInteract = false;
         this.sound.play('cancelMenu');
-        
+
         if (window.transitionTo) {
             window.transitionTo(this, 'introDance');
         } else {

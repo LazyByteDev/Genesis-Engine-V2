@@ -42,10 +42,10 @@ app-example
 /ios
 /android
 
-bin/
+# neutralino js
 .tmp/
+.storage/
 dist/
+bin/
 
 neutralinojs.log
-
-./storage

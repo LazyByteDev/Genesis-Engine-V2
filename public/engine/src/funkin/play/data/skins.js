@@ -6,13 +6,10 @@ class Skins {
         const skinName = pd.get('skins.ui', 'funkin');
         const jsonKey = 'skinData_' + skinName;
 
-        // Si ya está en caché, cargamos los assets directamente
         if (scene.cache.json.exists(jsonKey)) {
             Skins.loadAssets(scene, scene.cache.json.get(jsonKey));
         } else {
-            // Si no, cargamos el JSON y escuchamos a que termine para extraer los paths
             scene.load.json(jsonKey, Path.dataSkins + skinName + '.json');
-
             scene.load.once('filecomplete-json-' + jsonKey, (key, type, data) => {
                 Skins.loadAssets(scene, data);
             });
@@ -22,18 +19,14 @@ class Skins {
     static loadAssets(scene, data) {
         const basePath = data?.global?.basePath || 'Funkin';
 
-        // Función recursiva para buscar "path" o "assetPath" en todo el JSON
         const extract = (obj) => {
             if (!obj || typeof obj !== 'object') return;
 
             const assetPath = obj.path !== undefined ? obj.path : obj.assetPath;
 
             if (assetPath) {
-                // Comprobamos si tiene extensión explícita (.jpg, .png, etc)
                 const ext = assetPath.match(/\.[0-9a-z]+$/i);
                 let finalPath = assetPath;
-
-                // Heurística simple para saber si es audio o imagen
                 let isAudio = obj.volume !== undefined || assetPath.includes('sound');
 
                 if (!ext) {
@@ -42,35 +35,31 @@ class Skins {
 
                 const fullUrl = Path.skins + basePath + '/' + finalPath;
 
+                // CORRECCIÓN: Llave única combinando basePath y assetPath
+                const cacheKey = basePath + '_' + assetPath;
+
                 if (isAudio) {
-                    if (!scene.cache.audio.exists(assetPath)) scene.load.audio(assetPath, fullUrl);
+                    if (!scene.cache.audio.exists(cacheKey)) scene.load.audio(cacheKey, fullUrl);
                 } else {
-                    if (!scene.cache.image.exists(assetPath)) scene.load.image(assetPath, fullUrl);
+                    if (!scene.textures.exists(cacheKey)) scene.load.image(cacheKey, fullUrl);
                 }
             }
 
-            // Escanear propiedades anidadas
             for (let k in obj) {
                 if (typeof obj[k] === 'object') extract(obj[k]);
             }
         };
 
         extract(data);
-        console.log(`[Skins] Assets puestos en cola para la skin base: ${basePath}`);
     }
 
     constructor(scene) {
         this.scene = scene;
         this.skinName = scene.playData.get('skins.ui', 'funkin');
-
-        // Almacenamos el JSON crudo en memoria por si queremos consultar datos de offsets o escalas
         this.data = scene.cache.json.get('skinData_' + this.skinName) || {};
         this.basePath = this.data?.global?.basePath || 'Funkin';
     }
 
-    /**
-     * Acceso rápido a las propiedades del JSON (ej: get('gameplay.strumline.scale'))
-     */
     get(path, defaultValue = null) {
         if (!path) return this.data;
         const result = path.split('.').reduce((prev, curr) =>
@@ -79,8 +68,14 @@ class Skins {
         return result !== undefined ? result : defaultValue;
     }
 
+    // NUEVO: Método para obtener la llave exacta que usarás en scene.add.image()
+    getKey(pathStr) {
+        const assetPath = this.get(pathStr);
+        if (!assetPath) return null;
+        return this.basePath + '_' + assetPath;
+    }
+
     update(time, delta) {
-        // Reservado para posibles lógicas animadas de la UI en el futuro
     }
 }
 
