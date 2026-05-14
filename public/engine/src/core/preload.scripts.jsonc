@@ -52,6 +52,16 @@
   "src/funkin/play/UI/arrows/notes/renderer.js",
   "src/funkin/play/UI/arrows/notes/logic.js",
 
+  "src/funkin/play/UI/arrows/sustains/logic.js",
+  "src/funkin/play/UI/arrows/sustains/renderer.js",
+
+  "src/funkin/play/UI/arrows/splash/logic.js",
+  "src/funkin/play/UI/arrows/splash/renderer.js",
+
+  "src/funkin/play/UI/arrows/bot.js",
+
+  "src/funkin/play/Judgment.js",
+
   // intro
   "src/funkin/menu/intro/text.js",
   "src/funkin/menu/intro/funScript.js",

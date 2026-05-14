@@ -6,8 +6,6 @@ class Strum extends Phaser.GameObjects.Sprite {
         const atlasKey = skins.getKey('gameplay.strumline.path') + '_XML';
 
         super(scene, x, y, atlasKey);
-
-        // Agrega el sprite a la escena
         scene.add.existing(this);
 
         this.direction = direction;
@@ -15,40 +13,30 @@ class Strum extends Phaser.GameObjects.Sprite {
         this.skinData = skins.get('gameplay.strumline');
         this.dirData = this.skinData.animations[direction];
 
-        // Origen en 0,0 como solicitaste
         this.setOrigin(0, 0);
-
-        // Aplicamos la escala y el alpha desde el JSON (con valores seguros por defecto)
         const scaleVal = this.skinData.scale !== undefined ? this.skinData.scale : 0.7;
         this.setScale(scaleVal);
         this.setAlpha(this.skinData.alpha !== undefined ? this.skinData.alpha : 1.0);
 
-        // Creamos las animaciones
         this.createAnimations(atlasKey);
 
-        // Forzamos el frame estático un momento para medir sus dimensiones reales
         const staticAnimKey = `${atlasKey}_${this.direction}_static`;
         if (this.scene.anims.exists(staticAnimKey)) {
             const firstFrame = this.scene.anims.get(staticAnimKey).frames[0].frame.name;
             this.setFrame(firstFrame);
         }
 
-        // LA MAGIA: Contrarrestamos el origen 0,0 restando la mitad de la textura escalada.
-        // Esto mantiene el centro visual exactamente donde le pedimos (x, y).
         this.baseX = x - (this.width * scaleVal) / 2;
         this.baseY = y - (this.height * scaleVal) / 2;
 
-        // Arrancamos el comportamiento
+        this.isHeld = false; // Estado para rastrear si la tecla sigue presionada
         this.playAnim('static');
     }
 
     createAnimations(atlasKey) {
         const anims = this.scene.anims;
         const texture = this.scene.textures.get(atlasKey);
-
         if (!texture || texture.key === '__MISSING') return;
-
-        const allFrames = texture.getFrameNames();
 
         ['static', 'press', 'confirm'].forEach(state => {
             const prefix = this.dirData[state];
@@ -57,13 +45,12 @@ class Strum extends Phaser.GameObjects.Sprite {
             const animKey = `${atlasKey}_${this.direction}_${state}`;
             if (anims.exists(animKey)) anims.remove(animKey);
 
-            const validFrames = allFrames.filter(f => f.startsWith(prefix) || f.includes(prefix)).sort();
+            const validFrames = texture.getFrameNames().filter(f => f.startsWith(prefix) || f.includes(prefix)).sort();
 
             if (validFrames.length > 0) {
-                const framesArray = validFrames.map(f => ({ key: atlasKey, frame: f }));
                 anims.create({
                     key: animKey,
-                    frames: framesArray,
+                    frames: validFrames.map(f => ({ key: atlasKey, frame: f })),
                     frameRate: 24,
                     repeat: state === 'static' ? -1 : 0
                 });
@@ -76,13 +63,17 @@ class Strum extends Phaser.GameObjects.Sprite {
         const atlasKey = skins.getKey('gameplay.strumline.path') + '_XML';
         const animKey = `${atlasKey}_${this.direction}_${state}`;
 
-        if (!this.scene.anims.exists(animKey)) {
-            if (state !== 'static') this.playAnim('static');
-            return;
-        }
+        if (!this.scene.anims.exists(animKey)) return;
 
-        // Reproduce hacia adelante (se quitó la lógica en reversa)
         this.play(animKey, true);
+
+        // Lógica de transición de Confirm -> Press si se mantiene la tecla
+        if (state === 'confirm') {
+            this.once('animationcomplete', () => {
+                if (this.isHeld) this.playAnim('press');
+                else this.playAnim('static');
+            });
+        }
 
         if (state === 'press') {
             this.once('animationcomplete', () => {
@@ -93,19 +84,11 @@ class Strum extends Phaser.GameObjects.Sprite {
             });
         }
 
-        // Aplicamos el offset extraído del JSON
-        let offset = [0, 0];
-        if (this.skinData.offsets && this.skinData.offsets[state]) {
-            offset = this.skinData.offsets[state];
-        }
-
-        // Sumamos la posición corregida + el offset del JSON
+        let offset = this.skinData.offsets[state] || [0, 0];
         this.setPosition(this.baseX + offset[0], this.baseY + offset[1]);
     }
 
-    update(time, delta) {
-        // Reservado por si las notas en un futuro necesitan actualizar partículas o efectos
-    }
+    update(time, delta) {}
 }
 
 window.Strum = Strum;

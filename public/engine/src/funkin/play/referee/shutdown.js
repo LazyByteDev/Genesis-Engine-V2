@@ -2,16 +2,30 @@
 
 class PlayRefereeShutdown {
     static execute(referee) {
-        if (referee.cameras && referee.cameras.shutdown) referee.cameras.shutdown();
-        if (referee.skins && referee.skins.shutdown) referee.skins.shutdown();
-        if (referee.stage && referee.stage.shutdown) referee.stage.shutdown();
-        if (referee.song && referee.song.shutdown) referee.song.shutdown();
-        if (referee.strumlines && referee.strumlines.shutdown) referee.strumlines.shutdown();
+        if (!referee) return;
 
-        // Limpieza de las notas
-        if (referee.notesLogic && referee.notesLogic.shutdown) referee.notesLogic.shutdown();
+        console.log("[Referee] Iniciando protocolo de apagado...");
 
-        if (referee.countdown && referee.countdown.shutdown) referee.countdown.shutdown();
+        // 1. Detener Audio (Prioridad Máxima)
+        if (referee.song && typeof referee.song.shutdown === 'function') {
+            referee.song.shutdown();
+        }
+
+        // 2. Limpiar Lógicas y Eventos
+        if (referee.strumlines && typeof referee.strumlines.shutdown === 'function') referee.strumlines.shutdown();
+        if (referee.notesLogic && typeof referee.notesLogic.shutdown === 'function') referee.notesLogic.shutdown();
+        if (referee.sustainLogic && typeof referee.sustainLogic.shutdown === 'function') referee.sustainLogic.shutdown();
+
+        // ---> NUEVO: Apagar bot <---
+        if (referee.bot && typeof referee.bot.shutdown === 'function') referee.bot.shutdown();
+
+        if (referee.countdown && typeof referee.countdown.shutdown === 'function') referee.countdown.shutdown();
+
+        // 3. Limpiar Cámaras y Stage
+        if (referee.cameras && typeof referee.cameras.shutdown === 'function') referee.cameras.shutdown();
+        if (referee.stage && typeof referee.stage.shutdown === 'function') referee.stage.shutdown();
+
+        console.log("[Referee] Escena limpiada correctamente.");
     }
 }
 

@@ -5,27 +5,27 @@ class NoteLogic {
         this.scene = scene;
         this.strumlines = this.scene.referee.strumlines;
 
-        this.chartNotes = this.scene.referee.chart.getNotes();
-        this.dirs = Object.keys(this.strumlines.animations);
+        const rawNotes = this.scene.referee.chart.getNotes() || [];
+        this.chartNotes = rawNotes.map(n => ({
+            ...n,
+            t: Number(n.t),
+            d: Number(n.d),
+            l: Number(n.l || 0) // <-- Asegurar parseo
+        })).sort((a, b) => a.t - b.t);
 
+        this.dirs = Object.keys(this.strumlines.animations);
         this.activeNotes = this.scene.add.group();
         this.noteIndex = 0;
-
-        this.scrollSpeed = this.scene.playData.get('scrollSpeed', 2.0);
+        this.scrollSpeed = Number(this.scene.playData.get('scrollSpeed', 2.0));
     }
 
     update(time, delta) {
-        const songTime = window.Conductor.songPosition;
+        const songTime = (window.Conductor && window.Conductor.songPosition !== undefined) ? window.Conductor.songPosition : 0;
+        const spawnThreshold = 4500;
 
-        // Aumentamos el umbral a 3000ms (3 segundos visuales antes de que lleguen a la flecha).
-        // Esto permite que las notas empiecen a dibujarse y subir mientras el Countdown está contando.
-        const spawnThreshold = 3000 / this.scrollSpeed;
-
-        // 1. LÓGICA DE SPAWN TARDÍO/TEMPRANO
         while (this.noteIndex < this.chartNotes.length) {
             const noteData = this.chartNotes[this.noteIndex];
 
-            // Permite spawnear si la nota está dentro de los próximos 3 segundos
             if (noteData.t - songTime <= spawnThreshold) {
                 this.spawnNote(noteData);
                 this.noteIndex++;
@@ -34,12 +34,19 @@ class NoteLogic {
             }
         }
 
-        // 2. ACTUALIZACIÓN VISUAL Y DESTRUCCIÓN
+        if (!this.activeNotes || !this.activeNotes.scene) return;
+
         this.activeNotes.getChildren().forEach(note => {
             note.updatePos(songTime, this.scrollSpeed);
 
-            // Si la nota subió y sobrepasó por mucho la flecha, se destruye
-            if (note.y < -150) {
+            const diff = songTime - note.noteData.t;
+            if (diff > window.Judgment.PBOT1_MISS_THRESHOLD) {
+                if (note.noteData.p === 'pl') {
+                    console.log("[Miss] Nota ignorada");
+                    this.scene.events.emit('noteMiss', { note });
+                }
+                note.destroy();
+            } else if (note.y < -250) {
                 note.destroy();
             }
         });
@@ -48,6 +55,8 @@ class NoteLogic {
     spawnNote(noteData) {
         const isPlayer = noteData.p === 'pl';
         const strumsGroup = isPlayer ? this.strumlines.playerStrums : this.strumlines.opponentStrums;
+
+        if (!strumsGroup || !strumsGroup.scene) return;
 
         const directionName = this.dirs[noteData.d];
         const targetStrum = strumsGroup.getChildren().find(s => s.direction === directionName);
@@ -60,11 +69,19 @@ class NoteLogic {
             }
 
             this.activeNotes.add(note);
+
+            // NUEVO: Instanciar nota larga si tiene duración
+            if (noteData.l > 0 && this.scene.referee.sustainLogic) {
+                this.scene.referee.sustainLogic.spawnSustain(noteData);
+            }
         }
     }
 
     shutdown() {
-        this.activeNotes.clear(true, true);
+        if (this.activeNotes && this.activeNotes.scene) {
+            this.activeNotes.clear(true, true);
+        }
+        this.activeNotes = null;
     }
 }
 

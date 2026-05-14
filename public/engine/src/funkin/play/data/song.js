@@ -3,17 +3,64 @@
 class Song {
     static preload(scene) {
         const pd = scene.playData;
-        const path = Path.songs + pd.songId + '/song/';
+        const path = window.Path.songs + pd.songId + '/song/';
 
-        scene.load.audio('inst', path + pd.get('audio.instrumental.inst.file', 'Inst.ogg'));
+        // 1. Creación de ID único
+        const timestamp = Date.now();
+        const randomId = Math.floor(Math.random() * 100000);
+        const bpmHash = pd.get('audio.bpm', 100);
+        pd.uniqueSessionId = `${pd.songId}_${bpmHash}_${timestamp}_${randomId}`;
+
+        pd.instKey = `inst_${pd.uniqueSessionId}`;
+        pd.voicesPlayerKey = `voicesPlayer_${pd.uniqueSessionId}`;
+        pd.voicesOppKey = `voicesOpp_${pd.uniqueSessionId}`;
+
+        // 2. Cargamos pistas principales
+        scene.load.audio(pd.instKey, path + pd.get('audio.instrumental.inst.file', 'Inst.ogg'));
 
         if (pd.get('audio.needsVoices', true)) {
             if (!pd.get('audio.multiVocal', false)) {
-                scene.load.audio('voicesPlayer', path + 'Voices.ogg');
+                scene.load.audio(pd.voicesPlayerKey, path + 'Voices.ogg');
             } else {
-                scene.load.audio('voicesPlayer', path + pd.get('audio.vocals.player.file', 'Voices-bf.ogg'));
-                scene.load.audio('voicesOpp', path + pd.get('audio.vocals.opponent.file', 'Voices-pico.ogg'));
+                scene.load.audio(pd.voicesPlayerKey, path + pd.get('audio.vocals.player.file', 'Voices-bf.ogg'));
+                scene.load.audio(pd.voicesOppKey, path + pd.get('audio.vocals.opponent.file', 'Voices-pico.ogg'));
             }
+        }
+
+        // 3. Precarga dinámica de sonidos de Miss desde la Skin
+        const jsonKey = pd.skinJsonKey;
+        const loadMissSounds = (data) => {
+            const basePath = data?.global?.basePath || 'Funkin';
+            const uniqueSkinId = pd.uniqueSkinId;
+            const misses = data?.gameplay?.misses?.sounds?.path;
+
+            if (Array.isArray(misses)) {
+                let addedFiles = false;
+
+                misses.forEach((missPath) => {
+                    let finalPath = missPath;
+                    if (!finalPath.match(/\.[0-9a-z]+$/i)) finalPath += '.ogg';
+
+                    const fullUrl = window.Path.skins + basePath + '/' + finalPath;
+                    const cacheKey = `${basePath}_${missPath}_${uniqueSkinId}_miss`;
+
+                    if (!scene.cache.audio.exists(cacheKey)) {
+                        scene.load.audio(cacheKey, fullUrl);
+                        addedFiles = true;
+                    }
+                });
+
+                // PARCHE CRÍTICO: Si Phaser ya había cerrado el cargador, lo obligamos a reanudarse
+                if (addedFiles && !scene.load.isLoading()) {
+                    scene.load.start();
+                }
+            }
+        };
+
+        if (scene.cache.json.exists(jsonKey)) {
+            loadMissSounds(scene.cache.json.get(jsonKey));
+        } else {
+            scene.load.once(`filecomplete-json-${jsonKey}`, (k, t, data) => loadMissSounds(data));
         }
     }
 
@@ -26,49 +73,161 @@ class Song {
         this.needsVoices = pd.get('audio.needsVoices', true);
         this.multiVocal = pd.get('audio.multiVocal', false);
 
+        this.instKey = pd.instKey;
+        this.voicesPlayerKey = pd.voicesPlayerKey;
+        this.voicesOppKey = pd.voicesOppKey;
+
         this.instTrack = null;
         this.playerTrack = null;
         this.opponentTrack = null;
 
-        // Configurar pistas en memoria
-        this.setupTracks();
+        this.hasStarted = false;
 
-        // NUEVO: Escuchamos el evento del CountDown para reproducir
-        this.scene.events.once('startSong', () => {
-            this.play();
-        });
-    }
-
-    setupTracks() {
-        this.instTrack = this.scene.sound.add('inst');
-
-        this.instTrack.on('complete', () => {
-            this.onSongEnd();
-        });
-
-        if (this.needsVoices) {
-            this.playerTrack = this.scene.sound.add('voicesPlayer');
-            if (this.multiVocal) this.opponentTrack = this.scene.sound.add('voicesOpp');
-        }
-    }
-
-    play() {
         window.Conductor.mapTimeChanges([
             new window.SongTimeChange(0, this.bpm, 4, 4)
         ]);
 
-        this.instTrack.play();
+        const crochet = (60 / this.bpm) * 1000;
+        window.Conductor.songPosition = -(crochet * 4);
+
+        this.setupTracks();
+        this.setupMissSounds();
+
+        this.scene.events.once('startSong', () => {
+            this.play();
+        });
+
+        this.onNoteHitListener = this.onNoteHit.bind(this);
+        this.onNoteMissListener = this.onNoteMiss.bind(this);
+
+        this.scene.events.on('noteHit', this.onNoteHitListener);
+        this.scene.events.on('noteMiss', this.onNoteMissListener);
+
+        this.scene.events.once('shutdown', this.shutdown, this);
+    }
+
+    setupTracks() {
+        if (this.scene.cache.audio.exists(this.instKey)) {
+            this.instTrack = this.scene.sound.add(this.instKey);
+            this.instTrack.on('complete', () => {
+                this.onSongEnd();
+            });
+        }
+
+        if (this.needsVoices) {
+            if (this.scene.cache.audio.exists(this.voicesPlayerKey)) {
+                this.playerTrack = this.scene.sound.add(this.voicesPlayerKey);
+            }
+            if (this.multiVocal && this.scene.cache.audio.exists(this.voicesOppKey)) {
+                this.opponentTrack = this.scene.sound.add(this.voicesOppKey);
+            }
+        }
+    }
+
+    setupMissSounds() {
+        this.missSoundKeys = [];
+        this.missVolume = 1.0;
+
+        const skins = this.scene.referee.skins;
+        if (!skins) return;
+
+        const missPaths = skins.get('gameplay.misses.sounds.path');
+        this.missVolume = skins.get('gameplay.misses.sounds.volume', 1.0);
+
+        if (Array.isArray(missPaths)) {
+            missPaths.forEach(path => {
+                const cacheKey = `${skins.basePath}_${path}_${skins.uniqueId}_miss`;
+                this.missSoundKeys.push(cacheKey);
+            });
+        }
+    }
+
+    onNoteHit(data) {
+        if (data && data.note && data.note.noteData && data.note.noteData.p === 'pl') {
+            if (this.playerTrack && this.playerTrack.volume === 0) {
+                this.playerTrack.volume = 1;
+            }
+        }
+    }
+
+    onNoteMiss(data) {
+        // Validación más robusta. Si los datos están vacíos (Ej: presionar una tecla sin notas), asumimos que el jugador falló
+        let isPlayer = true;
+        if (data && data.note && data.note.noteData) {
+            isPlayer = data.note.noteData.p === 'pl';
+        }
+
+        if (isPlayer) {
+            // Muteamos la voz
+            if (this.playerTrack && this.playerTrack.volume > 0) {
+                this.playerTrack.volume = 0;
+            }
+
+            // Disparamos el sonido al azar
+            if (this.missSoundKeys.length > 0) {
+                const randomKey = this.missSoundKeys[Math.floor(Math.random() * this.missSoundKeys.length)];
+
+                if (this.scene.cache.audio.exists(randomKey)) {
+                    this.scene.sound.play(randomKey, { volume: this.missVolume });
+                } else {
+                    console.warn(`[Song] Audio miss no cargado en caché: ${randomKey}`);
+                }
+            }
+        }
+    }
+
+    play() {
+        if (this.hasStarted) return;
+        this.hasStarted = true;
+
+        if (this.instTrack) this.instTrack.play();
         if (this.playerTrack) this.playerTrack.play();
         if (this.opponentTrack) this.opponentTrack.play();
+    }
 
-        console.log(`[Song] Iniciando: ${this.bpm} BPM`);
+    shutdown() {
+        this.hasStarted = false;
+
+        this.scene.events.off('noteHit', this.onNoteHitListener);
+        this.scene.events.off('noteMiss', this.onNoteMissListener);
+
+        const tracks = [this.instTrack, this.playerTrack, this.opponentTrack];
+        tracks.forEach(track => {
+            if (track) {
+                track.stop();
+                track.destroy();
+            }
+        });
+
+        if (this.scene && this.scene.cache && this.scene.cache.audio) {
+            if (this.instKey) this.scene.cache.audio.remove(this.instKey);
+            if (this.voicesPlayerKey) this.scene.cache.audio.remove(this.voicesPlayerKey);
+            if (this.voicesOppKey) this.scene.cache.audio.remove(this.voicesOppKey);
+
+            if (this.missSoundKeys) {
+                this.missSoundKeys.forEach(key => {
+                    if (this.scene.cache.audio.exists(key)) {
+                        this.scene.cache.audio.remove(key);
+                    }
+                });
+            }
+        }
+
+        this.instTrack = null;
+        this.playerTrack = null;
+        this.opponentTrack = null;
+
+        if (this.scene && this.scene.sound) {
+            this.scene.sound.stopAll();
+        }
+
+        if (window.Conductor) {
+            window.Conductor.songPosition = 0;
+        }
     }
 
     onSongEnd() {
-        window.Conductor.mapTimeChanges([
-            new window.SongTimeChange(0, 102, 4, 4)
-        ]);
-
+        this.shutdown();
         const target = this.origin === 'freeplay' ? 'FreeplayScene' : 'MainMenuScene';
         if (window.transitionTo) {
             window.transitionTo(this.scene, target);
@@ -78,15 +237,20 @@ class Song {
     }
 
     update(time, delta) {
+        if (!this.hasStarted) {
+            window.Conductor.songPosition += delta;
+            return;
+        }
+
         if (!this.instTrack || !this.instTrack.isPlaying) return;
 
         window.Conductor.update(this.instTrack.seek * 1000);
 
         const masterTime = this.instTrack.seek;
-        if (this.playerTrack?.isPlaying && Math.abs(this.playerTrack.seek - masterTime) > 0.02) {
+        if (this.playerTrack?.isPlaying && Math.abs(this.playerTrack.seek - masterTime) > 0.01) {
             this.playerTrack.seek = masterTime;
         }
-        if (this.opponentTrack?.isPlaying && Math.abs(this.opponentTrack.seek - masterTime) > 0.02) {
+        if (this.opponentTrack?.isPlaying && Math.abs(this.opponentTrack.seek - masterTime) > 0.01) {
             this.opponentTrack.seek = masterTime;
         }
     }

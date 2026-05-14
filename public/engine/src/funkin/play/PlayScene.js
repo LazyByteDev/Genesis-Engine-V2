@@ -1,27 +1,31 @@
 // src/funkin/play/PlayScene.js
 
 class PlayScene extends Phaser.Scene {
-    constructor() {
-        super({ key: "PlayScene" });
-    }
+  constructor() {
+    super({ key: "PlayScene" });
+  }
 
-    init() {
-        this.playData = new window.PlayData(this);
-    }
+  init() {
+    this.playData = new window.PlayData(this);
+  }
 
-    preload() {
-        window.PlayRefereePreload.execute(this);
-    }
+  preload() {
+    window.PlayRefereePreload.execute(this);
+  }
 
-    create() {
-      this.sound.stopAll();
+  create() {
+    this.sound.stopAll();
 
-        this.referee = new window.PlayReferee(this);
-    }
+    this.referee = new window.PlayReferee(this);
 
-    update(time, delta) {
-        window.PlayRefereeUpdate.execute(this.referee, time, delta);
-    }
+    this.events.once("shutdown", () => {
+      window.PlayRefereeShutdown.execute(this.referee);
+    });
+  }
+
+  update(time, delta) {
+    window.PlayRefereeUpdate.execute(this.referee, time, delta);
+  }
 }
 
 window.PlayScene = PlayScene;
