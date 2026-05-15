@@ -13,7 +13,13 @@ class Strum extends Phaser.GameObjects.Sprite {
         this.skinData = skins.get('gameplay.strumline');
         this.dirData = this.skinData.animations[direction];
 
+        // NO SE TOCA EL ORIGEN
         this.setOrigin(0, 0);
+
+        // Guardamos el X y Y "perfectos" (centros calculados por positions.js)
+        this.targetX = x;
+        this.targetY = y;
+
         const scaleVal = this.skinData.scale !== undefined ? this.skinData.scale : 0.7;
         this.setScale(scaleVal);
         this.setAlpha(this.skinData.alpha !== undefined ? this.skinData.alpha : 1.0);
@@ -26,11 +32,22 @@ class Strum extends Phaser.GameObjects.Sprite {
             this.setFrame(firstFrame);
         }
 
+        // CÁLCULO ORIGINAL MANTENIDO
         this.baseX = x - (this.width * scaleVal) / 2;
         this.baseY = y - (this.height * scaleVal) / 2;
 
-        this.isHeld = false; // Estado para rastrear si la tecla sigue presionada
+        this.isHeld = false;
+        this.currentState = 'static';
         this.playAnim('static');
+    }
+
+    // NUEVO: Método seguro para reescalar sin romper el Origin
+    applyScale(newScale) {
+        this.setScale(newScale);
+        // Si el tamaño cambia (ej. a 0.4 en modo mini), recalculamos su base usando el centro exacto
+        this.baseX = this.targetX - (this.width * newScale) / 2;
+        this.baseY = this.targetY - (this.height * newScale) / 2;
+        this.playAnim(this.currentState || 'static');
     }
 
     createAnimations(atlasKey) {
@@ -66,8 +83,8 @@ class Strum extends Phaser.GameObjects.Sprite {
         if (!this.scene.anims.exists(animKey)) return;
 
         this.play(animKey, true);
+        this.currentState = state;
 
-        // Lógica de transición de Confirm -> Press si se mantiene la tecla
         if (state === 'confirm') {
             this.once('animationcomplete', () => {
                 if (this.isHeld) this.playAnim('press');
@@ -84,8 +101,12 @@ class Strum extends Phaser.GameObjects.Sprite {
             });
         }
 
+        // Ajuste dinámico proporcional de Offsets
+        const jsonScale = this.skinData.scale !== undefined ? this.skinData.scale : 0.7;
+        const ratio = this.scaleX / jsonScale;
         let offset = this.skinData.offsets[state] || [0, 0];
-        this.setPosition(this.baseX + offset[0], this.baseY + offset[1]);
+
+        this.setPosition(this.baseX + (offset[0] * ratio), this.baseY + (offset[1] * ratio));
     }
 
     update(time, delta) {}

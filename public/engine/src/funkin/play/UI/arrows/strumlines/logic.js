@@ -10,6 +10,15 @@ class StrumlineLogic {
     this.opponentStrums = this.scene.add.group();
     this.playerStrums = this.scene.add.group();
 
+    this.ghostTapping = false;
+    this.downscroll = true;
+    this.middleScroll = 'mini';
+
+    this.hideOpStrums = false;
+    this.hideOpNotes = false;
+
+    this.mobileStrums = window.isMobile || false;
+
     this.createStrumlines();
 
     this.onKeyDown = (e) => this.handleInput(e, true);
@@ -21,20 +30,28 @@ class StrumlineLogic {
   }
 
   createStrumlines() {
-    const scale = this.skins.get("gameplay.strumline.scale") || 0.7;
+    const baseScale = this.skins.get("gameplay.strumline.scale") || 0.7;
+    const baseSpacing = this.skins.get("gameplay.strumline.spacing") || (160 * baseScale);
+    const offsets = this.skins.get("gameplay.strumline.offsets.static") || [0, 0];
 
-    // NUEVO: Lee el espaciado desde el JSON, o usa el fallback matemático clásico
-    const spacing = this.skins.get("gameplay.strumline.spacing") || (160 * scale);
-
-    const totalWidth = spacing * this.dirs.length;
-
-    const xOpp = this.scene.scale.width * 0.25 - totalWidth / 2 + spacing / 2;
-    const xPlayer = this.scene.scale.width * 0.75 - totalWidth / 2 + spacing / 2;
-    const yPos = 100;
+    const positioner = new window.ClassicalPosition(this.scene);
 
     this.dirs.forEach((dir, i) => {
-      const opp = new window.Strum(this.scene, xOpp + i * spacing, yPos, dir, i);
-      const ply = new window.Strum(this.scene, xPlayer + i * spacing, yPos, dir, i);
+      // Oponente
+      const pOpp = positioner.getPos(i, false, baseSpacing, baseScale, this.downscroll, offsets, this.middleScroll, this.mobileStrums, this.hideOpStrums, this.hideOpNotes);
+      const opp = new window.Strum(this.scene, pOpp.x, pOpp.y, dir, i);
+      opp.applyScale(pOpp.scale);
+      opp.setAlpha(pOpp.strumAlpha);
+      opp.noteAlpha = pOpp.noteAlpha; // Propiedad limpia que las notas heredan
+      opp.downscroll = pOpp.downscroll;
+
+      // Jugador
+      const pPly = positioner.getPos(i, true, baseSpacing, baseScale, this.downscroll, offsets, this.middleScroll, this.mobileStrums, false, false);
+      const ply = new window.Strum(this.scene, pPly.x, pPly.y, dir, i);
+      ply.applyScale(pPly.scale);
+      ply.setAlpha(pPly.strumAlpha);
+      ply.noteAlpha = pPly.noteAlpha;
+      ply.downscroll = pPly.downscroll;
 
       if (this.scene.referee.cameras) {
         this.scene.referee.cameras.add(opp, "ui");
@@ -51,8 +68,6 @@ class StrumlineLogic {
     this.dirs.forEach((dir, i) => {
       const controlFunc = window.Controls[`NOTE_${dir.toUpperCase()}`];
       if (controlFunc && controlFunc(e)) {
-        if (!this.playerStrums.getChildren) return;
-
         const strum = this.playerStrums.getChildren().find((s) => s.direction === dir);
         if (!strum) return;
 
@@ -66,7 +81,11 @@ class StrumlineLogic {
             if (Math.abs(diff) <= window.Judgment.PBOT1_MISS_THRESHOLD) {
               this.processHit(note, diff, strum);
             } else {
-              this.processMiss(strum);
+              if (!this.ghostTapping) {
+                  this.processMiss(strum);
+              } else {
+                  strum.playAnim("press");
+              }
             }
           } else {
             let holdingSustain = false;
@@ -77,14 +96,17 @@ class StrumlineLogic {
             }
 
             if (!holdingSustain) {
-                this.processMiss(strum);
+                if (!this.ghostTapping) {
+                    this.processMiss(strum);
+                } else {
+                    strum.playAnim("press");
+                }
             } else {
                 strum.playAnim("confirm");
             }
           }
         } else {
           strum.playAnim("static");
-
           if (this.scene.referee.sustainLogic) {
               this.scene.referee.sustainLogic.onKeyRelease(dir);
           }
@@ -95,38 +117,29 @@ class StrumlineLogic {
 
   findHitNote(direction) {
     if (!this.scene.referee.notesLogic || !this.scene.referee.notesLogic.activeNotes) return null;
-    if (!this.scene.referee.notesLogic.activeNotes.getChildren) return null;
-
     const notes = this.scene.referee.notesLogic.activeNotes
       .getChildren()
       .filter((n) => n.noteData.p === "pl" && n.direction === direction);
 
     if (notes.length === 0) return null;
 
-    return notes.sort(
-      (a, b) =>
+    return notes.sort((a, b) =>
         Math.abs(a.noteData.t - window.Conductor.songPosition) -
-        Math.abs(b.noteData.t - window.Conductor.songPosition),
+        Math.abs(b.noteData.t - window.Conductor.songPosition)
     )[0];
   }
 
   processHit(note, diff, strum) {
     const rating = window.Judgment.getRating(diff);
     const score = window.Judgment.calculateScore(diff);
-
     this.scene.events.emit("noteHit", { note, rating, score });
     strum.playAnim("confirm");
-
-    if (this.scene.referee.sustainLogic) {
-        this.scene.referee.sustainLogic.onNoteHit(note);
-    }
-
+    if (this.scene.referee.sustainLogic) this.scene.referee.sustainLogic.onNoteHit(note);
     note.destroy();
   }
 
   processMiss(strum) {
     strum.playAnim("press");
-
     this.scene.events.emit("noteMiss", { direction: strum.direction });
   }
 
@@ -139,12 +152,8 @@ class StrumlineLogic {
   shutdown() {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
-
     if (this.opponentStrums && this.opponentStrums.scene) this.opponentStrums.clear(true, true);
     if (this.playerStrums && this.playerStrums.scene) this.playerStrums.clear(true, true);
-
-    this.opponentStrums = null;
-    this.playerStrums = null;
   }
 }
 

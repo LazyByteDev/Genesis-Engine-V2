@@ -46,6 +46,7 @@
   "src/funkin/play/stage/props.js",
 
   "src/funkin/play/UI/arrows/directions.js",
+  "src/funkin/play/UI/arrows/strumlines/positions.js",
   "src/funkin/play/UI/arrows/strumlines/renderer.js",
   "src/funkin/play/UI/arrows/strumlines/logic.js",
 

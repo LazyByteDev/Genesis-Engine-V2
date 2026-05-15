@@ -16,13 +16,19 @@ class Note extends Phaser.GameObjects.Sprite {
         this.animPrefix = this.skinData.animations[this.direction];
 
         this.setOrigin(0, 0);
-
-        // Z-INDEX PRIORITARIO (Por encima de los Sustains)
         this.setDepth(30);
 
-        const scaleVal = Number(this.skinData.scale !== undefined ? this.skinData.scale : 0.7);
-        this.setScale(scaleVal);
-        this.setAlpha(Number(this.skinData.alpha !== undefined ? this.skinData.alpha : 1.0));
+        const jsonScale = Number(this.skinData.scale !== undefined ? this.skinData.scale : 0.7);
+        const finalScale = this.strumTarget.scaleX !== undefined ? this.strumTarget.scaleX : jsonScale;
+        this.setScale(finalScale);
+
+        // Hereda la opacidad dinámica limpia
+        const jsonAlpha = Number(this.skinData.alpha !== undefined ? this.skinData.alpha : 1.0);
+        const targetAlpha = this.strumTarget.noteAlpha !== undefined ? this.strumTarget.noteAlpha : jsonAlpha;
+        this.setAlpha(targetAlpha);
+
+        // Si la opacidad es 0, optimizamos ocultándolo de Phaser
+        if (targetAlpha <= 0) this.setVisible(false);
 
         this.createAnimations(atlasKey);
 
@@ -36,8 +42,9 @@ class Note extends Phaser.GameObjects.Sprite {
         this.targetY = this.strumTarget.baseY;
 
         if (this.skinData.Offset) {
-            this.baseOffsetX += Number(this.skinData.Offset[0] || 0);
-            this.targetY += Number(this.skinData.Offset[1] || 0);
+            const ratio = finalScale / jsonScale;
+            this.baseOffsetX += Number(this.skinData.Offset[0] || 0) * ratio;
+            this.targetY += Number(this.skinData.Offset[1] || 0) * ratio;
         }
 
         this.playAnim(animKey);
@@ -76,7 +83,10 @@ class Note extends Phaser.GameObjects.Sprite {
 
     updatePos(songTime, scrollSpeed) {
         const timeDiff = this.noteData.t - songTime;
-        const currentY = this.targetY + (timeDiff * 0.45 * scrollSpeed);
+        const strumDownscroll = this.strumTarget.downscroll;
+        const dir = strumDownscroll ? -1 : 1;
+
+        const currentY = this.targetY + (timeDiff * 0.45 * scrollSpeed * dir);
         this.setPosition(this.baseOffsetX, currentY);
     }
 }

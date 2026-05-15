@@ -21,11 +21,16 @@ class SustainTrail {
     this.isCompleted = false;
     this.isOut = false;
 
-    this.scaleVal = Number(this.skinData.scale !== undefined ? this.skinData.scale : 0.6);
-    this.alphaVal = Number(this.skinData.alpha !== undefined ? this.skinData.alpha : 1.0);
+    const jsonScale = Number(this.skinData.scale !== undefined ? this.skinData.scale : 0.6);
+    this.scaleVal = this.strumTarget.scaleX !== undefined ? this.strumTarget.scaleX : jsonScale;
 
-    this.offsetX = this.skinData.Offset ? Number(this.skinData.Offset[0] || 0) : 0;
-    this.offsetY = this.skinData.Offset ? Number(this.skinData.Offset[1] || 0) : 0;
+    // Hereda su propio noteAlpha limpio de posiciones
+    const jsonAlpha = Number(this.skinData.alpha !== undefined ? this.skinData.alpha : 1.0);
+    this.alphaVal = this.strumTarget.noteAlpha !== undefined ? this.strumTarget.noteAlpha : jsonAlpha;
+
+    const ratio = this.scaleVal / jsonScale;
+    this.offsetX = this.skinData.Offset ? Number(this.skinData.Offset[0] || 0) * ratio : 0;
+    this.offsetY = this.skinData.Offset ? Number(this.skinData.Offset[1] || 0) * ratio : 0;
 
     const strumSkinData = skins.get("gameplay.strumline");
     const strumScale = strumSkinData.scale !== undefined ? strumSkinData.scale : 0.7;
@@ -41,8 +46,8 @@ class SustainTrail {
       const staticFrameName = frames.find((f) => f.startsWith(staticPrefix));
       if (staticFrameName) {
         const frameData = strumTexture.get(staticFrameName);
-        staticWidth = frameData.width * strumScale;
-        staticHeight = frameData.height * strumScale;
+        staticWidth = frameData.width * (this.strumTarget.scaleX || strumScale);
+        staticHeight = frameData.height * (this.strumTarget.scaleY || strumScale);
       }
     }
 
@@ -64,7 +69,7 @@ class SustainTrail {
     this.bodyFrameName = null;
     this.bodyFrameHeight = 0;
 
-    this.endSprite = scene.add.sprite(0, 0, this.atlasKey).setOrigin(0.5, 0).setDepth(20);
+    this.endSprite = scene.add.sprite(0, 0, this.atlasKey).setDepth(20);
 
     if (scene.referee.cameras) {
       scene.referee.cameras.add(this.endSprite, "ui");
@@ -97,6 +102,9 @@ class SustainTrail {
   updatePos(songTime, scrollSpeed, delta) {
     if (this.isCompleted || this.isOut) return;
 
+    const strumDownscroll = this.strumTarget.downscroll;
+    const dirMult = strumDownscroll ? -1 : 1;
+
     const targetX = this.fixedTargetX;
     const targetY = this.fixedTargetY;
 
@@ -112,93 +120,95 @@ class SustainTrail {
     if (this.sustainLength <= 10 && this.wasGoodHit) {
       this.isCompleted = true;
       this.setVisible(false);
-      if (this.strumTarget.isHeld === false)
-        this.strumTarget.playAnim("static");
+      if (this.strumTarget.isHeld === false) this.strumTarget.playAnim("static");
       return;
     }
 
     const pixelsPerMs = 0.45 * scrollSpeed;
+    let visualHeight = this.sustainLength * pixelsPerMs;
 
-    let physicalTopRaw = targetY + (this.noteData.t - songTime) * pixelsPerMs;
-    let fullDisplayHeightRaw = this.fullSustainLength * pixelsPerMs;
-
-    let physicalTop = Math.round(physicalTopRaw);
-    let fullDisplayHeight = Math.round(fullDisplayHeightRaw);
-    let physicalBottom = physicalTop + fullDisplayHeight;
-
-    let visualTop = physicalTop;
+    let noteY = targetY + (this.noteData.t - songTime) * pixelsPerMs * dirMult;
 
     if (this.wasGoodHit && !this.missedNote) {
-      if (visualTop < targetY) {
-        visualTop = Math.round(targetY);
-      }
+      noteY = targetY;
     }
 
-    let visualHeight = physicalBottom - visualTop;
+    // Usamos puramente la opacidad calculada para optimizar visibilidad
+    const isHidden = this.alphaVal <= 0;
 
-    if (visualHeight <= 0) {
-      visualHeight = 0;
+    if (visualHeight <= 0 || isHidden) {
       this.bodyPieces.forEach((p) => p.setVisible(false));
-    } else {
-      if (this.bodyFrameName && this.bodyFrameHeight > 0) {
-        const basePieceH = this.bodyFrameHeight * this.scaleVal;
 
-        // Calculamos cuántas piezas se necesitan.
-        const numPieces = Math.ceil(visualHeight / basePieceH);
+      if (isHidden && this.endSprite) {
+          this.endSprite.setVisible(false);
+          let endPos = noteY + (visualHeight * dirMult);
+          this.endSprite.setPosition(Math.round(targetX), Math.round(endPos));
+          if (!strumDownscroll && this.endSprite.y < -300) this.isOut = true;
+          else if (strumDownscroll && this.endSprite.y > this.scene.scale.height + 300) this.isOut = true;
+      }
+      return;
+    }
 
-        while (this.bodyPieces.length < numPieces) {
-          const sp = this.scene.add.sprite(0, 0, this.atlasKey, this.bodyFrameName);
-          sp.setOrigin(0.5, 0).setDepth(20);
-          if (this.scene.referee.cameras)
-            this.scene.referee.cameras.add(sp, "ui");
-          this.bodyPieces.push(sp);
-        }
+    if (this.bodyFrameName && this.bodyFrameHeight > 0) {
+      const basePieceH = this.bodyFrameHeight * this.scaleVal;
+      const numPieces = Math.ceil(visualHeight / basePieceH);
 
-        const exactTargetX = Math.round(targetX);
-        const endVisualY = visualTop + visualHeight;
+      while (this.bodyPieces.length < numPieces) {
+        const sp = this.scene.add.sprite(0, 0, this.atlasKey, this.bodyFrameName);
+        sp.setDepth(20);
+        if (this.scene.referee.cameras) this.scene.referee.cameras.add(sp, "ui");
+        this.bodyPieces.push(sp);
+      }
 
-        // Magia Anti-Gaps: Distribuimos las piezas matemáticamente y forzamos un solape de altura
-        const exactPieceH = visualHeight / numPieces;
-        let curY = visualTop;
+      const exactTargetX = Math.round(targetX);
+      const exactPieceH = visualHeight / numPieces;
+      let curY = noteY;
 
-        for (let i = 0; i < this.bodyPieces.length; i++) {
-          const sp = this.bodyPieces[i];
+      for (let i = 0; i < this.bodyPieces.length; i++) {
+        const sp = this.bodyPieces[i];
 
-          if (i < numPieces && curY < endVisualY) {
-            sp.setVisible(true);
-            sp.setAlpha(this.alphaVal);
+        if (i < numPieces) {
+          sp.setVisible(true);
+          sp.setAlpha(this.alphaVal);
+          sp.setFlipY(strumDownscroll);
 
-            let startY = Math.floor(curY);
-            // +1 píxel de superposición para tapar fracturas entre los límites
-            let nextY = Math.ceil(curY + exactPieceH) + 1;
+          let startY = Math.floor(curY);
+          let nextY = Math.floor(curY + (exactPieceH * dirMult)) + (strumDownscroll ? -1 : 1);
+          let endVisualY = noteY + (visualHeight * dirMult);
 
-            if (nextY > Math.ceil(endVisualY)) {
-              nextY = Math.ceil(endVisualY);
-            }
-
+          if (!strumDownscroll) {
+            if (nextY > Math.ceil(endVisualY)) nextY = Math.ceil(endVisualY);
             let integerHeight = nextY - startY;
-
-            if (integerHeight > 0) {
-              sp.setPosition(exactTargetX, startY);
-              sp.setCrop();
-              // Se expanden escalándose equitativamente
-              sp.setScale(this.scaleVal, integerHeight / this.bodyFrameHeight);
-            } else {
-              sp.setVisible(false);
-            }
-
-            curY += exactPieceH;
+            sp.setOrigin(0.5, 0);
+            sp.setPosition(exactTargetX, startY);
+            sp.setScale(this.scaleVal, Math.max(0, integerHeight) / this.bodyFrameHeight);
           } else {
-            sp.setVisible(false);
+            if (nextY < Math.floor(endVisualY)) nextY = Math.floor(endVisualY);
+            let integerHeight = startY - nextY;
+            sp.setOrigin(0.5, 1);
+            sp.setPosition(exactTargetX, startY);
+            sp.setScale(this.scaleVal, Math.max(0, integerHeight) / this.bodyFrameHeight);
           }
+
+          curY += (exactPieceH * dirMult);
+        } else {
+          sp.setVisible(false);
         }
       }
     }
 
     if (this.endSprite) {
-      this.endSprite.setPosition(Math.round(targetX), physicalBottom);
-      if (this.endSprite.y < -300) {
-        this.isOut = true;
+      this.endSprite.setVisible(true);
+      this.endSprite.setFlipY(strumDownscroll);
+      let endPos = noteY + (visualHeight * dirMult);
+      this.endSprite.setPosition(Math.round(targetX), Math.round(endPos));
+
+      if (!strumDownscroll) {
+        this.endSprite.setOrigin(0.5, 0);
+        if (this.endSprite.y < -300) this.isOut = true;
+      } else {
+        this.endSprite.setOrigin(0.5, 1);
+        if (this.endSprite.y > this.scene.scale.height + 300) this.isOut = true;
       }
     }
   }

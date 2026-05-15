@@ -10,7 +10,7 @@ class NoteLogic {
             ...n,
             t: Number(n.t),
             d: Number(n.d),
-            l: Number(n.l || 0) // <-- Asegurar parseo
+            l: Number(n.l || 0)
         })).sort((a, b) => a.t - b.t);
 
         this.dirs = Object.keys(this.strumlines.animations);
@@ -40,14 +40,20 @@ class NoteLogic {
             note.updatePos(songTime, this.scrollSpeed);
 
             const diff = songTime - note.noteData.t;
+            const strumDownscroll = note.strumTarget ? note.strumTarget.downscroll : false;
+
             if (diff > window.Judgment.PBOT1_MISS_THRESHOLD) {
                 if (note.noteData.p === 'pl') {
                     console.log("[Miss] Nota ignorada");
                     this.scene.events.emit('noteMiss', { note });
                 }
                 note.destroy();
-            } else if (note.y < -250) {
-                note.destroy();
+            } else {
+                if (!strumDownscroll && note.y < -250) {
+                    note.destroy();
+                } else if (strumDownscroll && note.y > this.scene.scale.height + 250) {
+                    note.destroy();
+                }
             }
         });
     }
@@ -70,7 +76,6 @@ class NoteLogic {
 
             this.activeNotes.add(note);
 
-            // NUEVO: Instanciar nota larga si tiene duración
             if (noteData.l > 0 && this.scene.referee.sustainLogic) {
                 this.scene.referee.sustainLogic.spawnSustain(noteData);
             }

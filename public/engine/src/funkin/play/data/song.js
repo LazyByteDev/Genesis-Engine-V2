@@ -5,7 +5,6 @@ class Song {
         const pd = scene.playData;
         const path = window.Path.songs + pd.songId + '/song/';
 
-        // 1. Creación de ID único
         const timestamp = Date.now();
         const randomId = Math.floor(Math.random() * 100000);
         const bpmHash = pd.get('audio.bpm', 100);
@@ -15,7 +14,6 @@ class Song {
         pd.voicesPlayerKey = `voicesPlayer_${pd.uniqueSessionId}`;
         pd.voicesOppKey = `voicesOpp_${pd.uniqueSessionId}`;
 
-        // 2. Cargamos pistas principales
         scene.load.audio(pd.instKey, path + pd.get('audio.instrumental.inst.file', 'Inst.ogg'));
 
         if (pd.get('audio.needsVoices', true)) {
@@ -27,32 +25,45 @@ class Song {
             }
         }
 
-        // 3. Precarga dinámica de sonidos de Miss desde la Skin
+        // PRECARGA DE LOS SONIDOS DE MISS POR DEFECTO (RUTA CORREGIDA)
+        ['missnote1', 'missnote2', 'missnote3'].forEach((missPath) => {
+            // Apunta directamente a assets/images/skins/Funkin/miss/
+            const fullUrl = window.Path.skins + 'Funkin/miss/' + missPath + '.ogg';
+            const cacheKey = `default_${missPath}_miss`;
+
+            if (!scene.cache.audio.exists(cacheKey)) {
+                scene.load.audio(cacheKey, fullUrl);
+            }
+        });
+
         const jsonKey = pd.skinJsonKey;
         const loadMissSounds = (data) => {
             const basePath = data?.global?.basePath || 'Funkin';
             const uniqueSkinId = pd.uniqueSkinId;
-            const misses = data?.gameplay?.misses?.sounds?.path;
 
-            if (Array.isArray(misses)) {
-                let addedFiles = false;
+            let misses = data?.misses?.sounds?.path;
 
-                misses.forEach((missPath) => {
-                    let finalPath = missPath;
-                    if (!finalPath.match(/\.[0-9a-z]+$/i)) finalPath += '.ogg';
+            if (misses) {
+                if (typeof misses === 'string') misses = [misses];
 
-                    const fullUrl = window.Path.skins + basePath + '/' + finalPath;
-                    const cacheKey = `${basePath}_${missPath}_${uniqueSkinId}_miss`;
+                if (Array.isArray(misses)) {
+                    let addedFiles = false;
+                    misses.forEach((missPath) => {
+                        let finalPath = missPath;
+                        if (!finalPath.match(/\.[0-9a-z]+$/i)) finalPath += '.ogg';
 
-                    if (!scene.cache.audio.exists(cacheKey)) {
-                        scene.load.audio(cacheKey, fullUrl);
-                        addedFiles = true;
+                        const fullUrl = window.Path.skins + basePath + '/' + finalPath;
+                        const cacheKey = `${basePath}_${missPath}_${uniqueSkinId}_miss`;
+
+                        if (!scene.cache.audio.exists(cacheKey)) {
+                            scene.load.audio(cacheKey, fullUrl);
+                            addedFiles = true;
+                        }
+                    });
+
+                    if (addedFiles && !scene.load.isLoading()) {
+                        scene.load.start();
                     }
-                });
-
-                // PARCHE CRÍTICO: Si Phaser ya había cerrado el cargador, lo obligamos a reanudarse
-                if (addedFiles && !scene.load.isLoading()) {
-                    scene.load.start();
                 }
             }
         };
@@ -72,6 +83,9 @@ class Song {
         this.origin = pd.origin;
         this.needsVoices = pd.get('audio.needsVoices', true);
         this.multiVocal = pd.get('audio.multiVocal', false);
+
+        // NUEVO: Variable para silenciar los miss
+        this.muteMiss = false;
 
         this.instKey = pd.instKey;
         this.voicesPlayerKey = pd.voicesPlayerKey;
@@ -131,13 +145,20 @@ class Song {
         const skins = this.scene.referee.skins;
         if (!skins) return;
 
-        const missPaths = skins.get('gameplay.misses.sounds.path');
-        this.missVolume = skins.get('gameplay.misses.sounds.volume', 1.0);
+        let missPaths = skins.get('misses.sounds.path');
+        this.missVolume = skins.get('misses.sounds.volume', 1.0);
 
-        if (Array.isArray(missPaths)) {
-            missPaths.forEach(path => {
-                const cacheKey = `${skins.basePath}_${path}_${skins.uniqueId}_miss`;
-                this.missSoundKeys.push(cacheKey);
+        if (missPaths) {
+            if (typeof missPaths === 'string') missPaths = [missPaths];
+            if (Array.isArray(missPaths)) {
+                missPaths.forEach(path => {
+                    const cacheKey = `${skins.basePath}_${path}_${skins.uniqueId}_miss`;
+                    this.missSoundKeys.push(cacheKey);
+                });
+            }
+        } else {
+            ['missnote1', 'missnote2', 'missnote3'].forEach(path => {
+                this.missSoundKeys.push(`default_${path}_miss`);
             });
         }
     }
@@ -151,7 +172,6 @@ class Song {
     }
 
     onNoteMiss(data) {
-        // Validación más robusta. Si los datos están vacíos (Ej: presionar una tecla sin notas), asumimos que el jugador falló
         let isPlayer = true;
         if (data && data.note && data.note.noteData) {
             isPlayer = data.note.noteData.p === 'pl';
@@ -163,14 +183,18 @@ class Song {
                 this.playerTrack.volume = 0;
             }
 
-            // Disparamos el sonido al azar
-            if (this.missSoundKeys.length > 0) {
-                const randomKey = this.missSoundKeys[Math.floor(Math.random() * this.missSoundKeys.length)];
+            // APLICAMOS LA CONDICIONAL DE MUTEMISS AQUÍ
+            if (!this.muteMiss) {
+                if (this.missSoundKeys.length > 0) {
+                    const randomKey = this.missSoundKeys[Math.floor(Math.random() * this.missSoundKeys.length)];
 
-                if (this.scene.cache.audio.exists(randomKey)) {
-                    this.scene.sound.play(randomKey, { volume: this.missVolume });
+                    if (this.scene.cache.audio.exists(randomKey)) {
+                        this.scene.sound.play(randomKey, { volume: this.missVolume });
+                    } else {
+                        console.warn(`[Song] Audio miss no cargado en caché: ${randomKey}`);
+                    }
                 } else {
-                    console.warn(`[Song] Audio miss no cargado en caché: ${randomKey}`);
+                    console.warn(`[Song] missSoundKeys está vacío, no se pudo reproducir nada.`);
                 }
             }
         }

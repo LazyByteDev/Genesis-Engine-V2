@@ -10,7 +10,6 @@ class NoteSplash extends Phaser.GameObjects.Sprite {
     this.setDepth(200);
     this.scene.add.existing(this);
 
-    // ASIGNACIÓN CRÍTICA A LA CÁMARA UI
     if (this.scene.referee.cameras) {
       this.scene.referee.cameras.add(this, "ui");
     }
@@ -21,7 +20,8 @@ class NoteSplash extends Phaser.GameObjects.Sprite {
     });
   }
 
-  spawn(x, y, direction, skinData) {
+  spawn(strumTarget, skinData) {
+    const direction = strumTarget.direction;
     const anims = skinData.animations[direction];
     if (!anims) return;
 
@@ -30,10 +30,26 @@ class NoteSplash extends Phaser.GameObjects.Sprite {
 
     this.setActive(true);
     this.setVisible(true);
-    this.setAlpha(skinData.alpha || 1);
-    this.setScale(skinData.scale || 1);
 
-    // Aplicar ChromaKey si tu skin de Pixel lo requiere
+    // Heredar el noteAlpha para evitar splashes fantasma si las notas están ocultas
+    const jsonAlpha = skinData.alpha !== undefined ? skinData.alpha : 1;
+    const targetAlpha = strumTarget.noteAlpha !== undefined ? strumTarget.noteAlpha : jsonAlpha;
+    this.setAlpha(targetAlpha);
+
+    if (targetAlpha <= 0) {
+        this.setVisible(false);
+        this.setActive(false);
+        return;
+    }
+
+    const jsonScale = skinData.scale !== undefined ? skinData.scale : 1;
+    const strumScale = strumTarget.scaleX !== undefined ? strumTarget.scaleX : 0.7;
+    const baseStrumScale = this.scene.referee.skins.get("gameplay.strumline.scale") || 0.7;
+
+    const amplificationRatio = strumScale / baseStrumScale;
+    const finalScale = jsonScale * amplificationRatio;
+    this.setScale(finalScale);
+
     if (skinData.chromaKey && window.StageProps) {
       window.StageProps.applyChromaKey(
         this,
@@ -43,15 +59,16 @@ class NoteSplash extends Phaser.GameObjects.Sprite {
 
     this.play(animToPlay);
 
-    // CÁLCULO DE CENTRO (Compensando el origen 0,0)
-    // Esto hace que el centro del dibujo coincida con el centro de la flecha
     const visualWidth = this.width * this.scaleX;
     const visualHeight = this.height * this.scaleY;
 
-    const offX = skinData.Offset ? skinData.Offset[0] : 0;
-    const offY = skinData.Offset ? skinData.Offset[1] : 0;
+    const offX = (skinData.Offset ? skinData.Offset[0] : 0) * amplificationRatio;
+    const offY = (skinData.Offset ? skinData.Offset[1] : 0) * amplificationRatio;
 
-    this.setPosition(x - visualWidth / 2 + offX, y - visualHeight / 2 + offY);
+    this.setPosition(
+        strumTarget.x - visualWidth / 2 + offX,
+        strumTarget.y - visualHeight / 2 + offY
+    );
   }
 }
 

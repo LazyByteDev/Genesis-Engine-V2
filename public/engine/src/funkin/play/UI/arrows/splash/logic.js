@@ -57,7 +57,6 @@ class NoteSplashLogic {
   onNoteHit(data) {
     if (!data || !data.note || !data.note.noteData) return;
 
-    // VERIFICACIÓN GLOBAL: Si la nota fue tocada por CUALQUIER bot (oponente o jugador), abortar splash
     if (data.note.isBotPlay) return;
 
     const isPlayer = data.note.noteData.p === "pl";
@@ -70,7 +69,6 @@ class NoteSplashLogic {
         this.showSplash(data.note.direction, true);
       }
     } else {
-      // Si el oponente no es IA (ej. alguien está jugando localmente con él), entonces saca splash perfecto
       this.showSplash(data.note.direction, false);
     }
   }
@@ -91,7 +89,8 @@ class NoteSplashLogic {
     if (targetStrum) {
       let splash = this.splashGroup.get();
       if (splash) {
-        splash.spawn(targetStrum.x, targetStrum.y, direction, this.skinData);
+        // Enviar solo la flecha entera y la skinData
+        splash.spawn(targetStrum, this.skinData);
       }
     }
   }
